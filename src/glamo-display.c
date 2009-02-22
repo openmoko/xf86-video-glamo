@@ -82,7 +82,7 @@ static const xf86CrtcFuncsRec glamo_crtc_funcs = {
 };
 
 static void
-ConvertModeXfreeToFb(DisplayModePtr mode, Rotation *rotation, struct fb_var_screeninfo *var) {
+ConvertModeXfreeToFb(const DisplayModePtr mode, const Rotation *rotation, struct fb_var_screeninfo *var) {
     Rotation rot;
     if (rotation)
         rot = *rotation;

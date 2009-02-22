@@ -29,6 +29,7 @@
 
 #include "xf86i2c.h"
 #include "xf86Crtc.h"
+#include "xf86Modes.h"
 
 #include "fbdevhw.h"
 
@@ -41,6 +42,10 @@
 static const char *display_state_switch_path = "/sys/bus/spi/devices/spi2.0/state";
 static const char *display_state_vga = "normal";
 static const char *display_state_qvga = "qvga-normal";
+
+typedef struct _GlamoOutput {
+   DisplayModePtr modes;
+} GlamoOutputRec, *GlamoOutputPtr;
 
 static void
 GlamoOutputDPMS(xf86OutputPtr output, int mode) {}
@@ -99,12 +104,108 @@ static const xf86OutputFuncsRec glamo_output_funcs = {
     .destroy = GlamoOutputDestroy
 };
 
+static void
+ConvertModeFbToXfree(const struct fb_var_screeninfo *var, DisplayModePtr mode,
+                     Rotation *rotation) {
+    mode->HDisplay = var->xres;
+    mode->VDisplay = var->yres;
+
+    mode->Clock = var->pixclock ? 1000000000 / var->pixclock : 0;
+    mode->HSyncStart = mode->HDisplay + var->right_margin;
+    mode->HSyncEnd = mode->HSyncStart + var->hsync_len;
+    mode->HTotal = mode->HSyncEnd + var->left_margin;
+    mode->VSyncStart = mode->VDisplay + var->lower_margin;
+    mode->VSyncEnd = mode->VSyncStart + var->vsync_len;
+    mode->VTotal = mode->VSyncEnd + var->upper_margin;
+
+    mode->Flags = 0;
+
+    xf86SetModeCrtc(mode, 0);
+
+    if (rotation) {
+        switch (var->rotate) {
+        case FB_ROTATE_UR:
+            *rotation = RR_Rotate_0;
+            break;
+        case FB_ROTATE_CW:
+            *rotation = RR_Rotate_90;
+            break;
+        case FB_ROTATE_UD:
+            *rotation = RR_Rotate_180;
+            break;
+        case FB_ROTATE_CCW:
+            *rotation = RR_Rotate_270;
+            break;
+        }
+    }
+}
+
 void
 GlamoOutputInit(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
     xf86OutputPtr output;
+    GlamoOutputPtr pGlamoOutput;
+    DisplayModePtr mode;
+
     output = xf86OutputCreate(pScrn, &glamo_output_funcs, "LCD");
+    if (!output)
+        return;
+
     output->possible_crtcs = 1;
     output->possible_clones = 0;
+
+    pGlamoOutput = (GlamoOutputPtr)xnfalloc(sizeof(GlamoOutputRec));
+    /* The code will still work if pGlamoOutput is not present, there will just
+     * be no builtin modes */
+    if (!pGlamoOutput) {
+        output->driver_private = NULL;
+        return;
+    }
+    output->driver_private = pGlamoOutput;
+    pGlamoOutput->modes = NULL;
+
+    mode = xnfalloc(sizeof(DisplayModeRec));
+    if (!mode)
+        return;
+
+    mode->next = NULL;
+    mode->prev = NULL;
+
+    ConvertModeFbToXfree(&pGlamo->fb_var, mode, NULL);
+    xf86SetModeDefaultName(mode);
+
+    pGlamoOutput->modes = xf86ModesAdd(pGlamoOutput->modes, mode);
+
+    /* This is a really really dirty hack. It assumes a configuration like on
+     * the freerunner. It would be much better if there was a way to query the
+     * framebuffer driver for all valid modes. */
+    mode = xf86DuplicateMode(mode);
+    if (!mode)
+        return;
+
+    if (mode->VDisplay <= 320) {
+        mode->HSyncStart = mode->HDisplay * 2 + (mode->HDisplay - mode->HSyncStart);
+        mode->HSyncEnd   = mode->HDisplay * 2 + (mode->HDisplay - mode->HSyncEnd);
+        mode->HTotal     = mode->HDisplay * 2 + (mode->HDisplay - mode->HTotal);
+        mode->HDisplay   *= 2;
+        mode->HSyncStart = mode->VDisplay * 2 + (mode->VSyncStart - mode->HDisplay);
+        mode->HSyncEnd   = mode->VDisplay * 2 + (mode->VSyncEnd - mode->HDisplay);
+        mode->HTotal     = mode->VDisplay * 2 + (mode->VTotal - mode->HDisplay);
+        mode->VDisplay   *= 2;
+    } else {
+        mode->HSyncStart = mode->HDisplay / 2 + (mode->HDisplay - mode->HSyncStart);
+        mode->HSyncEnd   = mode->HDisplay / 2 + (mode->HDisplay - mode->HSyncEnd);
+        mode->HTotal     = mode->HDisplay / 2 + (mode->HDisplay - mode->HTotal);
+        mode->HDisplay   /= 2;
+        mode->HSyncStart = mode->VDisplay / 2 + (mode->VSyncStart - mode->HDisplay);
+        mode->HSyncEnd   = mode->VDisplay / 2 + (mode->VSyncEnd - mode->HDisplay);
+        mode->HTotal     = mode->VDisplay / 2 + (mode->VTotal - mode->HDisplay);
+        mode->VDisplay   /= 2;
+    }
+
+    xf86SetModeCrtc(mode, 0);
+    xf86SetModeDefaultName(mode);
+    pGlamoOutput->modes = xf86ModesAdd(pGlamoOutput->modes, mode);
 }
 
 static xf86OutputStatus
@@ -150,15 +251,20 @@ GlamoOutputCommit(xf86OutputPtr output) {
 }
 
 static void GlamoOutputDestroy(xf86OutputPtr output) {
+    GlamoOutputPtr pGlamoOutput = output->driver_private;
+    while (pGlamoOutput->modes)
+        xf86DeleteMode(&pGlamoOutput->modes, pGlamoOutput->modes);
+    xfree(pGlamoOutput);
 }
 
 static DisplayModePtr GlamoOutputGetModes(xf86OutputPtr output) {
     GlamoPtr pGlamo = GlamoPTR(output->scrn);
+    GlamoOutputPtr pGlamoOutput = output->driver_private;
 
     output->mm_width = pGlamo->fb_var.width;
     output->mm_height = pGlamo->fb_var.height;
-
+    if (pGlamoOutput)
+        return xf86DuplicateModes(NULL, pGlamoOutput->modes);
     return NULL;
-    /*return fbdevHWGetBuildinMode(output->scrn);*/
 }
 
