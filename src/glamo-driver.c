@@ -43,6 +43,9 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 
+#include <sys/mman.h>
+
+
 static Bool debug = 0;
 
 #define TRACE_ENTER(str) \
@@ -249,6 +252,53 @@ GlamoFreeRec(ScrnInfoPtr pScrn)
 }
 
 /* -------------------------------------------------------------------- */
+
+/* Map the mmio registers of the glamo. We can not use xf86MapVidMem since it
+ * will open /dev/mem without O_SYNC. */
+static Bool
+GlamoMapMMIO(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+    off_t base = 0x8000000;
+    size_t length = 0x2400;
+    int fd;
+    off_t page_base = base & ~(getpagesize() - 1);
+    off_t base_offset = base - page_base;
+
+    fd = open("/dev/mem", O_RDWR | O_SYNC);
+    if (fd == -1) {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                   "Failed to open \"/dev/mem\": %s\n",
+                   strerror(errno));
+        return FALSE;
+    }
+    pGlamo->reg_base = (char *)mmap(NULL, length, PROT_READ | PROT_WRITE,
+                                    MAP_SHARED, fd, page_base);
+
+    close(fd);
+
+    if (pGlamo->reg_base == MAP_FAILED) {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                   "Failed to mmap mmio registers: %s\n",
+                   strerror(errno));
+        return FALSE;
+    }
+
+    pGlamo->reg_base += base_offset;
+
+    return TRUE;
+}
+
+static void
+GlamoUnmapMMIO(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+    size_t length = 0x2400;
+    char *page_base = (char *)((off_t)pGlamo->reg_base & ~(getpagesize() - 1));
+    size_t base_offset = page_base - pGlamo->reg_base;
+
+   if (pGlamo->reg_base != MAP_FAILED)
+        munmap(page_base, length + base_offset);
+}
+
 static Bool
 GlamoSwitchMode(int scrnIndex, DisplayModePtr mode, int flags) {
     ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
@@ -523,19 +573,20 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
         xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
                    "Render extension initialisation failed\n");
 
-    /* map in the registers */
-    pGlamo->reg_base = xf86MapVidMem(pScreen->myNum, VIDMEM_MMIO, 0x8000000, 0x2400);
-
     pGlamo->pScreen = pScreen;
 
-    xf86LoadSubModule(pScrn, "exa");
-    xf86LoaderReqSymLists(exaSymbols, NULL);
+    /* map in the registers */
+    if (GlamoMapMMIO(pScrn)) {
 
-	if (!GLAMODrawInit(pScrn)) {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+        xf86LoadSubModule(pScrn, "exa");
+        xf86LoaderReqSymLists(exaSymbols, NULL);
+
+    	if (!GLAMODrawInit(pScrn)) {
+            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                        "EXA hardware acceleration initialization failed\n");
-    } else {
-        pGlamo->accel = TRUE;
+        } else {
+            pGlamo->accel = TRUE;
+        }
     }
 
     xf86SetBlackWhitePixels(pScreen);
@@ -589,6 +640,7 @@ GlamoCloseScreen(int scrnIndex, ScreenPtr pScreen)
         GlamoRestoreHW(pScrn);
 
     fbdevHWUnmapVidmem(pScrn);
+    GlamoUnmapMMIO(pScrn);
 
     pScrn->vtSema = FALSE;
 
