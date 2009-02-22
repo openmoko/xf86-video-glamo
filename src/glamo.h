@@ -78,7 +78,7 @@ typedef volatile CARD16        VOL16;
 typedef struct _MemBuf {
 	int size;
 	int used;
-	void *address;
+	char data[1];
 } MemBuf;
 
 typedef struct {
@@ -111,11 +111,22 @@ typedef struct {
 
     /* linux framebuffer */
     int fb_fd;
+    struct fb_var_screeninfo fb_saved_var;
     struct fb_var_screeninfo fb_var;
     struct fb_fix_screeninfo fb_fix;
     unsigned char *fbstart;
 	unsigned char *fbmem;
 	int fboff;
+
+    /* save hardware registers */
+    short saved_clock_2d;
+    short saved_clock_isp;
+    short saved_clock_gen5_1;
+    short saved_clock_gen5_2;
+    short saved_hostbus_2;
+
+    /* Use hardware acceleration */
+    Bool accel;
 } GlamoRec, *GlamoPtr;
 
 #define GlamoPTR(p) ((GlamoPtr)((p)->driverPrivate))
@@ -136,22 +147,16 @@ MMIOSetBitMask(volatile char *mmio, CARD32 reg, CARD16 mask, CARD16 val)
 
 /* glamo_draw.c */
 Bool
-GLAMODrawInit(ScreenPtr pScreen);
-
-void
-GLAMODrawSetup(GlamoPtr pGlamo);
-
-void
-GLAMODrawEnable(GlamoPtr pScreen);
-
-void
-GLAMODrawDisable(ScreenPtr pScreen);
-
-void
-GLAMODrawFini(ScreenPtr pScreen);
+GLAMODrawInit(ScrnInfoPtr pScrn);
 
 Bool
-GLAMODrawExaInit(ScreenPtr pScreen, ScrnInfoPtr pScrn);
+GLAMODrawEnable(ScrnInfoPtr pScrn);
+
+void
+GLAMODrawDisable(ScrnInfoPtr pScrn);
+
+void
+GLAMODrawFini(ScrnInfoPtr pScrn);
 
 /* glamo-display.h */
 Bool

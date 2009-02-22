@@ -74,6 +74,9 @@ static const CARD8 GLAMOBltRop[16] = {
  * exa entry points declarations
  ********************************/
 
+static Bool
+GLAMODrawExaInit(ScrnInfoPtr pScrn);
+
 Bool
 GLAMOExaPrepareSolid(PixmapPtr      pPixmap,
 		     int            alu,
@@ -168,25 +171,57 @@ GLAMOWakeupHandler(pointer blockData, int result, pointer readmask)
 {
 }
 
-void
-GLAMODrawSetup(GlamoPtr pGlamo)
+Bool
+GLAMODrawInit(ScrnInfoPtr pScrn)
 {
-	GLAMOEngineEnable(pGlamo, GLAMO_ENGINE_2D);
-	GLAMOEngineReset(pGlamo, GLAMO_ENGINE_2D);
+    if (!GLAMODrawExaInit(pScrn))
+        return FALSE;
+
+	if (!GLAMOCMDQInit(pScrn)) {
+        GLAMODrawFini(pScrn);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 void
-GLAMODrawEnable(GlamoPtr pGlamo)
-{
-	GLAMOCMDQCacheSetup(pGlamo);
-	GLAMODrawSetup(pGlamo);
-	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
+GLAMODrawFini(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+    GLAMOCMDQFini(pScrn);
+    if (pGlamo->exa) {
+        exaDriverFini(pGlamo->pScreen);
+        xfree(pGlamo->exa);
+        pGlamo->exa = NULL;
+    }
 }
 
 Bool
-GLAMODrawExaInit(ScreenPtr pScreen, ScrnInfoPtr pScrn)
+GLAMODrawEnable(ScrnInfoPtr pScrn)
 {
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+	GLAMOEngineEnable(pGlamo, GLAMO_ENGINE_2D);
+	GLAMOEngineReset(pGlamo, GLAMO_ENGINE_2D);
+    GLAMOCMDQEnable(pScrn);
+
+	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
+
+    return TRUE;
+}
+
+void
+GLAMODrawDisable(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+    GLAMOCMDQDisable(pScrn);
+	GLAMOEngineDisable(pGlamo, GLAMO_ENGINE_2D);
+}
+
+static Bool
+GLAMODrawExaInit(ScrnInfoPtr pScrn)
+{
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
 
 	Bool success = FALSE;
 	ExaDriverPtr exa;
@@ -195,15 +230,16 @@ GLAMODrawExaInit(ScreenPtr pScreen, ScrnInfoPtr pScrn)
 			"EXA hardware acceleration initialising\n");
 
 	exa = pGlamo->exa = exaDriverAlloc();
-    if(!exa) return FALSE;
+    if(!exa)
+        return FALSE;
 
 	exa->memoryBase = pGlamo->fbstart;
 	exa->memorySize = 1024 * 1024 * 4;
 	/*exa->offScreenBase = pGlamo->fboff;*/
-	exa->offScreenBase = pScrn->virtualX * pScrn->virtualY * 2;
+	exa->offScreenBase = 480 * 640 * 2;
 
-	exa->exa_major = 2;
-	exa->exa_minor = 0;
+	exa->exa_major = EXA_VERSION_MAJOR;
+	exa->exa_minor = EXA_VERSION_MINOR;
 
 	exa->PrepareSolid = GLAMOExaPrepareSolid;
 	exa->Solid = GLAMOExaSolid;
@@ -217,7 +253,6 @@ GLAMODrawExaInit(ScreenPtr pScreen, ScrnInfoPtr pScrn)
 	exa->PrepareComposite = GLAMOExaPrepareComposite;
 	exa->Composite = GLAMOExaComposite;
 	exa->DoneComposite = GLAMOExaDoneComposite;
-
 
 	exa->DownloadFromScreen = GLAMOExaDownloadFromScreen;
 	exa->UploadToScreen = GLAMOExaUploadToScreen;
@@ -235,13 +270,15 @@ GLAMODrawExaInit(ScreenPtr pScreen, ScrnInfoPtr pScrn)
 
 	RegisterBlockAndWakeupHandlers(GLAMOBlockHandler,
 				       GLAMOWakeupHandler,
-				       pScreen);
+				       pGlamo->pScreen);
 
-	success = exaDriverInit(pScreen, exa);
+	success = exaDriverInit(pGlamo->pScreen, exa);
 	if (success) {
 		ErrorF("Initialized EXA acceleration\n");
 	} else {
 		ErrorF("Failed to initialize EXA acceleration\n");
+        xfree(pGlamo->exa);
+        pGlamo->exa = NULL;
 	}
 
 	return success;
@@ -513,3 +550,4 @@ GLAMOExaWaitMarker (ScreenPtr pScreen, int marker)
 
 	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
 }
+

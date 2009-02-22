@@ -37,7 +37,7 @@ do {									\
 	    pGlamo->cmd_queue_cache->size) {				\
 		GLAMOFlushCMDQCache(pGlamo, 1);				\
 	}								\
-	__head = (CARD16 *)((char *)pGlamo->cmd_queue_cache->address +	\
+	__head = (CARD16 *)((char *)pGlamo->cmd_queue_cache->data +	\
 	    pGlamo->cmd_queue_cache->used);				\
 	__count = 0;							\
 } while (0)
@@ -64,7 +64,7 @@ do {									\
 	    pGlamo->cmd_queue_cache->size) {				\
 		GLAMOFlushCMDQCache(pGlamo, 1);				\
 	}								\
-	__head = (CARD16 *)((char *)pGlamo->cmd_queue_cache->address +	\
+	__head = (CARD16 *)((char *)pGlamo->cmd_queue_cache->data +	\
 	    pGlamo->cmd_queue_cache->used);				\
 	__count = 0;							\
 	__total = n;							\
@@ -131,17 +131,21 @@ tv_le(struct timeval *tv1, struct timeval *tv2)
 
 #define TIMEDOUT()	(!tv_le(&_curtime, &_target))
 
-MemBuf *
-GLAMOCreateCMDQCache(GlamoPtr pGlamo);
 
 void
 GLAMOFlushCMDQCache(GlamoPtr pGlamo, Bool discard);
 
-void
-GLAMOCMDQCacheSetup(GlamoPtr pGlamo);
+Bool
+GLAMOCMDQInit(ScrnInfoPtr pScrn);
+
+Bool
+GLAMOCMDQEnable(ScrnInfoPtr pScrn);
 
 void
-GLAMOCMQCacheTeardown(GlamoPtr pGlamo);
+GLAMOCMDQDisable(ScrnInfoPtr pScrn);
+
+void
+GLAMOCMDQFini(ScrnInfoPtr pScrn);
 
 enum GLAMOEngine {
 	GLAMO_ENGINE_CMDQ,

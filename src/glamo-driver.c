@@ -36,6 +36,7 @@
 #include "xf86RandR12.h"
 
 #include "glamo.h"
+#include "glamo-regs.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -76,6 +77,19 @@ GlamoCrtcResize(ScrnInfoPtr scrn, int width, int height);
 
 static Bool
 GlamoInitFramebufferDevice(ScrnInfoPtr scrn, const char *fb_device);
+
+static void
+GlamoSaveHW(ScrnInfoPtr pScrn);
+
+static void
+GlamoRestoreHW(ScrnInfoPtr pScren);
+
+static Bool
+GlamoEnterVT(int scrnIndex, int flags);
+
+static void
+GlamoLeaveVT(int scrnIndex, int flags);
+
 /* -------------------------------------------------------------------- */
 
 static const xf86CrtcConfigFuncsRec glamo_crtc_config_funcs = {
@@ -158,10 +172,6 @@ static const char *fbdevHWSymbols[] = {
 
 	/* ScrnInfo hooks */
 	"fbdevHWAdjustFrameWeak",
-	"fbdevHWEnterVTWeak",
-	"fbdevHWLeaveVTWeak",
-	"fbdevHWRestore",
-	"fbdevHWSave",
 	"fbdevHWSaveScreen",
 	"fbdevHWSaveScreenWeak",
 	"fbdevHWValidModeWeak",
@@ -311,8 +321,8 @@ GlamoProbe(DriverPtr drv, int flags)
 				pScrn->ScreenInit    = GlamoScreenInit;
 				pScrn->SwitchMode    = GlamoSwitchMode;
 				pScrn->AdjustFrame   = fbdevHWAdjustFrameWeak();
-				pScrn->EnterVT       = fbdevHWEnterVTWeak();
-				pScrn->LeaveVT       = fbdevHWLeaveVTWeak();
+				pScrn->EnterVT       = GlamoEnterVT;
+				pScrn->LeaveVT       = GlamoLeaveVT;
 				pScrn->ValidMode     = fbdevHWValidModeWeak();
 
 				xf86DrvMsg(pScrn->scrnIndex, X_INFO,
@@ -347,6 +357,8 @@ GlamoPreInit(ScrnInfoPtr pScrn, int flags)
 
     GlamoGetRec(pScrn);
     pGlamo = GlamoPTR(pScrn);
+
+    pGlamo->accel = FALSE;
 
     pGlamo->pEnt = xf86GetEntityInfo(pScrn->entityList[0]);
 
@@ -464,11 +476,10 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
         xf86DrvMsg(scrnIndex, X_ERROR, "mapping of video memory failed\n");
         return FALSE;
     }
+
     pGlamo->fboff = fbdevHWLinearOffset(pScrn);
 
-    fbdevHWSave(pScrn);
     fbdevHWSaveScreen(pScreen, SCREEN_SAVER_ON);
-    fbdevHWAdjustFrame(scrnIndex,0,0,0);
 
     /* mi layer */
     miClearVisualTypes();
@@ -512,52 +523,50 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
         xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
                    "Render extension initialisation failed\n");
 
-        /* map in the registers */
-        pGlamo->reg_base = xf86MapVidMem(pScreen->myNum, VIDMEM_MMIO, 0x8000000, 0x2400);
+    /* map in the registers */
+    pGlamo->reg_base = xf86MapVidMem(pScreen->myNum, VIDMEM_MMIO, 0x8000000, 0x2400);
 
-        pGlamo->pScreen = pScreen;
+    pGlamo->pScreen = pScreen;
 
-        xf86LoadSubModule(pScrn, "exa");
-        xf86LoaderReqSymLists(exaSymbols, NULL);
+    xf86LoadSubModule(pScrn, "exa");
+    xf86LoaderReqSymLists(exaSymbols, NULL);
 
-	if (!GLAMODrawExaInit(pScreen, pScrn)) {
-            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+	if (!GLAMODrawInit(pScrn)) {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                        "EXA hardware acceleration initialization failed\n");
-            return FALSE;
-        }
+    } else {
+        pGlamo->accel = TRUE;
+    }
 
-        GLAMODrawEnable(pGlamo);
+    xf86SetBlackWhitePixels(pScreen);
+    miInitializeBackingStore(pScreen);
+    xf86SetBackingStore(pScreen);
 
-        xf86SetBlackWhitePixels(pScreen);
-        miInitializeBackingStore(pScreen);
-        xf86SetBackingStore(pScreen);
+    /* software cursor */
+    miDCInitialize(pScreen, xf86GetPointerScreenFuncs());
 
-        /* software cursor */
-        miDCInitialize(pScreen, xf86GetPointerScreenFuncs());
-
-        /* colormap */
-        if (!miCreateDefColormap(pScreen)) {
-            xf86DrvMsg(scrnIndex, X_ERROR,
-                       "internal error: miCreateDefColormap failed "
-                       "in GlamoScreenInit()\n");
-            return FALSE;
-        }
-
-        flags = CMAP_PALETTED_TRUECOLOR;
-        if (!xf86HandleColormaps(pScreen, 256, 8, fbdevHWLoadPaletteWeak(),
-                                 NULL, flags))
-            return FALSE;
-
+    GlamoEnterVT(scrnIndex, 0);
 
     xf86CrtcScreenInit(pScreen);
     xf86RandR12SetRotations(pScreen, RR_Rotate_0 | RR_Rotate_90 |
                                      RR_Rotate_180 | RR_Rotate_270);
+    /* colormap */
+    if (!miCreateDefColormap(pScreen)) {
+        xf86DrvMsg(scrnIndex, X_ERROR,
+                   "internal error: miCreateDefColormap failed "
+                   "in GlamoScreenInit()\n");
+        return FALSE;
+    }
+
+    flags = CMAP_PALETTED_TRUECOLOR;
+    if (!xf86HandleColormaps(pScreen, 256, 8, fbdevHWLoadPaletteWeak(),
+                             NULL, flags))
+        return FALSE;
 
     xf86DPMSInit(pScreen, xf86DPMSSet, 0);
 
     pScreen->SaveScreen = xf86SaveScreen;
 
-    xf86SetDesiredModes(pScrn);
     /* Wrap the current CloseScreen function */
     pGlamo->CloseScreen = pScreen->CloseScreen;
     pScreen->CloseScreen = GlamoCloseScreen;
@@ -573,8 +582,14 @@ GlamoCloseScreen(int scrnIndex, ScreenPtr pScreen)
     ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
     GlamoPtr pGlamo = GlamoPTR(pScrn);
 
-    fbdevHWRestore(pScrn);
+    if (pGlamo->accel)
+        GLAMODrawFini(pScrn);
+
+    if (pScrn->vtSema)
+        GlamoRestoreHW(pScrn);
+
     fbdevHWUnmapVidmem(pScrn);
+
     pScrn->vtSema = FALSE;
 
     pScreen->CreateScreenResources = pGlamo->CreateScreenResources;
@@ -642,6 +657,7 @@ GlamoInitFramebufferDevice(ScrnInfoPtr pScrn, const char *fb_device) {
         goto fail1;
     }
     return TRUE;
+
 fail1:
     close(pGlamo->fb_fd);
     pGlamo->fb_fd = -1;
@@ -649,3 +665,68 @@ fail2:
     return FALSE;
 }
 
+/* Save framebuffer setup and all the glamo registers we are going to touch */
+static void
+GlamoSaveHW(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+    volatile char *mmio = pGlamo->reg_base;
+
+    pGlamo->saved_clock_2d = MMIO_IN16(mmio, GLAMO_REG_CLOCK_2D);
+    pGlamo->saved_clock_isp = MMIO_IN16(mmio, GLAMO_REG_CLOCK_ISP);
+    pGlamo->saved_clock_gen5_1 = MMIO_IN16(mmio, GLAMO_REG_CLOCK_GEN5_1);
+    pGlamo->saved_clock_gen5_2 = MMIO_IN16(mmio, GLAMO_REG_CLOCK_GEN5_2);
+    pGlamo->saved_hostbus_2 = MMIO_IN16(mmio, GLAMO_REG_HOSTBUS(2));
+
+    if (ioctl(pGlamo->fb_fd, FBIOGET_VSCREENINFO, (void*)(&pGlamo->fb_saved_var)) == -1) {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                   "Framebuffer ioctl FBIOGET_FSCREENINFO failed: %s",
+                   strerror(errno));
+    }
+
+}
+
+static void
+GlamoRestoreHW(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+    volatile char *mmio = pGlamo->reg_base;
+
+    if (ioctl(pGlamo->fb_fd, FBIOPUT_VSCREENINFO, (void*)(&pGlamo->fb_saved_var)) == -1) {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                   "Framebuffer ioctl FBIOSET_FSCREENINFO failed: %s",
+                   strerror(errno));
+    }
+
+    MMIO_OUT16(mmio, GLAMO_REG_CLOCK_2D, pGlamo->saved_clock_2d);
+    MMIO_OUT16(mmio, GLAMO_REG_CLOCK_ISP, pGlamo->saved_clock_isp);
+    MMIO_OUT16(mmio, GLAMO_REG_CLOCK_GEN5_1, pGlamo->saved_clock_gen5_1);
+    MMIO_OUT16(mmio, GLAMO_REG_CLOCK_GEN5_2, pGlamo->saved_clock_gen5_2);
+    MMIO_OUT16(mmio, GLAMO_REG_HOSTBUS(2), pGlamo->saved_hostbus_2);
+}
+
+static Bool
+GlamoEnterVT(int scrnIndex, int flags) {
+    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+    GlamoSaveHW(pScrn);
+
+    if (pGlamo->accel)
+        GLAMODrawEnable(pScrn);
+
+    if (!xf86SetDesiredModes(pScrn))
+        return FALSE;
+
+    return TRUE;
+}
+
+
+static void
+GlamoLeaveVT(int scrnIndex, int flags) {
+    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+    if (pGlamo->accel)
+        GLAMODrawDisable(pScrn);
+
+    GlamoRestoreHW(pScrn);
+}

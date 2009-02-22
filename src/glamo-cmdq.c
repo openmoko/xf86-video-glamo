@@ -36,15 +36,15 @@
 static void
 GLAMOCMDQResetCP(GlamoPtr pGlamo);
 
-static void
-GLAMODumpRegs(GlamoPtr pGlamo, CARD16 from, CARD16 to);
-
 #define CQ_LEN 255
 #define CQ_MASK ((CQ_LEN + 1) * 1024 - 1)
 #define CQ_MASKL (CQ_MASK & 0xffff)
 #define CQ_MASKH (CQ_MASK >> 16)
 
 #if 0
+static void
+GLAMODumpRegs(GlamoPtr pGlamo, CARD16 from, CARD16 to);
+
 static void
 GLAMODebugFifo(GlamoPtr pGlamo)
 {
@@ -291,26 +291,6 @@ GLAMOEngineWait(GlamoPtr pGlamo,
 	GLAMOEngineWaitReal(pGlamo, engine, TRUE);
 }
 
-MemBuf *
-GLAMOCreateCMDQCache(GlamoPtr pGlamo)
-{
-	MemBuf *buf;
-
-	buf = (MemBuf *)xcalloc(1, sizeof(MemBuf));
-	if (buf == NULL)
-		return NULL;
-
-	buf->size = pGlamo->ring_len;
-	buf->address = xcalloc(1, buf->size);
-	if (buf->address == NULL) {
-		xfree(buf);
-		return NULL;
-	}
-	buf->used = 0;
-
-	return buf;
-}
-
 static void
 GLAMODispatchCMDQCache(GlamoPtr pGlamo)
 {
@@ -326,7 +306,7 @@ GLAMODispatchCMDQCache(GlamoPtr pGlamo)
     if (!buf->used)
         return;
 
-    addr = ((char *)buf->address);
+    addr = buf->data;
 	count = buf->used;
 	ring_count = pGlamo->ring_len;
 
@@ -356,7 +336,7 @@ GLAMODispatchCMDQCache(GlamoPtr pGlamo)
         /* ring_write being 0 will result in a deadlock because the cmdq read
          * will never stop. To avoid such an behaviour insert an empty
          * instruction. */
-        if(new_ring_write == 0) {
+        if (new_ring_write == 0) {
             memset((char*)(pGlamo->ring_addr), 0, 4);
             new_ring_write = 4;
         }
@@ -365,7 +345,7 @@ GLAMODispatchCMDQCache(GlamoPtr pGlamo)
         GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_CMDQ, FALSE);
 
         /* The write position has to change to trigger a read */
-        if(ring_write == new_ring_write) {
+        if (ring_write == new_ring_write) {
             memset((char*)(pGlamo->ring_addr + new_ring_write), 0, 4);
             new_ring_write += 4;
 /*            MMIO_OUT16(mmio, GLAMO_REG_CMDQ_WRITE_ADDRH,
@@ -404,21 +384,18 @@ static void
 GLAMOCMDQResetCP(GlamoPtr pGlamo)
 {
 	volatile char *mmio = pGlamo->reg_base;
-	int cq_len = CQ_LEN;
-	CARD32 queue_offset = 0;
+	CARD32 queue_offset = pGlamo->exa_cmd_queue->offset;
 
 	/* make the decoder happy? */
 	memset((char*)pGlamo->ring_addr, 0, pGlamo->ring_len);
 
 	GLAMOEngineReset(pGlamo, GLAMO_ENGINE_CMDQ);
 
-	queue_offset = pGlamo->exa_cmd_queue->offset;
-
 	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_BASE_ADDRL,
 		   queue_offset & 0xffff);
 	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_BASE_ADDRH,
 		   (queue_offset >> 16) & 0x7f);
-	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_LEN, cq_len);
+	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_LEN, CQ_LEN);
 
 	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_WRITE_ADDRH, 0);
 	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_WRITE_ADDRL, 0);
@@ -431,58 +408,76 @@ GLAMOCMDQResetCP(GlamoPtr pGlamo)
 	GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_ALL, FALSE);
 }
 
-static Bool
-GLAMOCMDQInit(GlamoPtr pGlamo,
-	      Bool force)
+Bool
+GLAMOCMDQInit(ScrnInfoPtr pScrn)
 {
-	int cq_len = CQ_LEN;
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+    MemBuf *buf;
 
-	if (!force && pGlamo->exa_cmd_queue)
-		return TRUE;
+    pGlamo->ring_len = (CQ_LEN + 1) * 1024;
 
-	pGlamo->ring_len = (cq_len + 1) * 1024;
+    buf = (MemBuf *)xcalloc(1, sizeof(MemBuf) + pGlamo->ring_len - 1);
 
-	pGlamo->exa_cmd_queue =
-		exaOffscreenAlloc(pGlamo->pScreen, pGlamo->ring_len,
-				  pGlamo->exa->pixmapOffsetAlign,
-				  TRUE, NULL, NULL);
+    if (!buf) {
+        return FALSE;
+    }
 
-	if (!pGlamo->exa_cmd_queue)
-		return FALSE;
-	pGlamo->ring_addr =
-		(CARD16 *) (pGlamo->fbstart +
-				pGlamo->exa_cmd_queue->offset);
+	buf->size = pGlamo->ring_len;
+	buf->used = 0;
 
-	GLAMOEngineEnable(pGlamo, GLAMO_ENGINE_CMDQ);
+    pGlamo->exa_cmd_queue = exaOffscreenAlloc(pGlamo->pScreen, pGlamo->ring_len,
+				                              pGlamo->exa->pixmapOffsetAlign,
+                                              TRUE, NULL, NULL);
 
-	GLAMOCMDQResetCP(pGlamo);
+    if (!pGlamo->exa_cmd_queue) {
+        xfree(buf);
+        return FALSE;
+    }
 
-	return TRUE;
+    pGlamo->ring_addr = (CARD16 *)(pGlamo->fbstart + pGlamo->exa_cmd_queue->offset);
+
+	pGlamo->cmd_queue_cache = buf;
+
+    return TRUE;
+}
+
+Bool
+GLAMOCMDQEnable(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+    pGlamo->ring_addr =	(CARD16 *) (pGlamo->fbstart + pGlamo->exa_cmd_queue->offset);
+
+    GLAMOEngineEnable(pGlamo, GLAMO_ENGINE_CMDQ);
+    GLAMOCMDQResetCP(pGlamo);
+
+    return TRUE;
 }
 
 void
-GLAMOCMDQCacheSetup(GlamoPtr pGlamo)
-{
-	GLAMOCMDQInit(pGlamo, TRUE);
-	if (pGlamo->cmd_queue_cache)
-		return;
-	pGlamo->cmd_queue_cache = GLAMOCreateCMDQCache(pGlamo);
-	if (pGlamo->cmd_queue_cache == FALSE)
-		FatalError("Failed to allocate cmd queue cache buffer.\n");
-}
+GLAMOCMDQDisable(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
 
-void
-GLAMOCMQCacheTeardown(GlamoPtr pGlamo)
-{
 	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
-
-	xfree(pGlamo->cmd_queue_cache->address);
-	xfree(pGlamo->cmd_queue_cache);
-	pGlamo->cmd_queue_cache = NULL;
-    if(0)
-        GLAMODumpRegs(pGlamo, 0, 0);
+    GLAMOEngineDisable(pGlamo, GLAMO_ENGINE_CMDQ);
 }
 
+void
+GLAMOCMDQFini(ScrnInfoPtr pScrn) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+    GLAMOCMDQDisable(pScrn);
+
+    if (pGlamo->cmd_queue_cache) {
+	    xfree(pGlamo->cmd_queue_cache);
+	    pGlamo->cmd_queue_cache = NULL;
+    }
+    if (pGlamo->exa_cmd_queue) {
+        exaOffscreenFree(pGlamo->pScreen, pGlamo->exa_cmd_queue);
+        pGlamo->exa_cmd_queue = NULL;
+    }
+}
+
+#if 0
 static void
 GLAMODumpRegs(GlamoPtr pGlamo,
               CARD16 from,
@@ -495,3 +490,4 @@ GLAMODumpRegs(GlamoPtr pGlamo,
 		*(VOL16*)(pGlamo->reg_base+i));
 	}
 }
+#endif

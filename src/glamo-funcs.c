@@ -22,15 +22,15 @@
  * Author:
  *  Dodji Seketeli <dodji@openedhand.com>
  */
-
 #include <unistd.h>
+#if 0
+
 
 #include "glamo-log.h"
 #include "glamo.h"
 #include "glamo-funcs.h"
 #include "glamo-regs.h"
 #include "glamo-cmdq.h"
-
 void
 GLAMOSetBitMask(GlamoPtr pGlamo, int reg, int mask, int val)
 {
@@ -555,4 +555,4 @@ GLAMOISPDisplayYUVPlanarFrame (GlamoPtr pGlamo,
 }
 
 #endif /*XV*/
-
+#endif
