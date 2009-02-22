@@ -53,20 +53,36 @@ GlamoCrtcGammaSet(xf86CrtcPtr crtc,  CARD16 *red, CARD16 *green, CARD16 *blue,
 static void
 GlamoCrtcDestroy(xf86CrtcPtr crtc);
 
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0)
 static Bool
 GlamoSetModeMajor(xf86CrtcPtr crtc, DisplayModePtr mode,
 				  Rotation rotation, int x, int y);
+
+#else
+
+static void
+GlamoModeSet(xf86CrtcPtr crtc, DisplayModePtr mode,
+           DisplayModePtr adjusted_mode, int x, int y);
+
+static Bool
+GlamoLock(xf86CrtcPtr crtc);
+
+static Bool
+GlamoModeFixup(xf86CrtcPtr crtc, DisplayModePtr mode,
+               DisplayModePtr adjusted_mode);
+
+static void
+GlamoPrepare(xf86CrtcPtr crtc);
+
+static void
+GlamoCommit(xf86CrtcPtr crtc);
+
+#endif
 
 static const xf86CrtcFuncsRec glamo_crtc_funcs = {
 	.dpms = GlamoCrtcDPMS,
 	.save = NULL,
 	.restore = NULL,
-	.lock = NULL,
-	.unlock = NULL,
-	.mode_fixup = NULL,
-	.prepare = NULL,
-	.mode_set = NULL,
-	.commit = NULL,
 	.gamma_set = GlamoCrtcGammaSet,
 	.shadow_allocate = NULL,
 	.shadow_create = NULL,
@@ -78,7 +94,21 @@ static const xf86CrtcFuncsRec glamo_crtc_funcs = {
 	.load_cursor_image = NULL,
 	.load_cursor_argb = NULL,
 	.destroy = GlamoCrtcDestroy,
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0)
+	.lock = NULL,
+	.unlock = NULL,
+	.mode_fixup = NULL,
+	.prepare = NULL,
+	.mode_set = NULL,
+	.commit = NULL,
 	.set_mode_major = GlamoSetModeMajor
+#else
+    .lock = GlamoLock,
+    .unlock = NULL,
+    .mode_fixup = GlamoModeFixup,
+    .prepare = GlamoPrepare,
+    .mode_set = GlamoModeSet,    .commit = GlamoCommit,
+#endif
 };
 
 static void
@@ -106,21 +136,19 @@ ConvertModeXfreeToFb(const DisplayModePtr mode, const Rotation *rotation, struct
 
     var->sync = 0;
     var->vmode = 0;
-    if (rot) {
-        switch (*rotation) {
-        case RR_Rotate_0:
-            var->rotate = FB_ROTATE_UR;
-            break;
-        case RR_Rotate_90:
-            var->rotate = FB_ROTATE_CW;
-            break;
-        case RR_Rotate_180:
-            var->rotate = FB_ROTATE_UD;
-            break;
-        case RR_Rotate_270:
-            var->rotate = FB_ROTATE_CCW;
-            break;
-        }
+    switch (rot) {
+    case RR_Rotate_0:
+        var->rotate = FB_ROTATE_UR;
+        break;
+    case RR_Rotate_90:
+        var->rotate = FB_ROTATE_CW;
+        break;
+    case RR_Rotate_180:
+        var->rotate = FB_ROTATE_UD;
+        break;
+    case RR_Rotate_270:
+        var->rotate = FB_ROTATE_CCW;
+        break;
     }
 }
 
@@ -140,6 +168,8 @@ static void GlamoCrtcGammaSet(xf86CrtcPtr crtc,  CARD16 *red, CARD16 *green,
 
 static void GlamoCrtcDestroy(xf86CrtcPtr crtc) {
 }
+
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0)
 
 static Bool
 GlamoSetModeMajor(xf86CrtcPtr crtc, DisplayModePtr mode,
@@ -218,3 +248,40 @@ done:
 
     return ret;
 }
+
+#else
+
+static void
+GlamoModeSet(xf86CrtcPtr crtc, DisplayModePtr mode,
+           DisplayModePtr adjusted_mode, int x, int y) {
+    GlamoPtr pGlamo = GlamoPTR(crtc->scrn);
+
+    struct fb_var_screeninfo var = pGlamo->fb_var;
+
+    ConvertModeXfreeToFb(adjusted_mode, NULL, &var);
+
+    ioctl(pGlamo->fb_fd, FBIOPUT_VSCREENINFO, (void*)&var);
+}
+
+static Bool
+GlamoLock(xf86CrtcPtr crtc) {
+    return FALSE;
+}
+
+static Bool
+GlamoModeFixup(xf86CrtcPtr crtc, DisplayModePtr mode,
+               DisplayModePtr adjusted_mode) {
+    return TRUE;
+}
+
+static void
+GlamoPrepare(xf86CrtcPtr crtc) {
+    (*crtc->funcs->dpms)(crtc, DPMSModeOff);
+}
+
+static void
+GlamoCommit(xf86CrtcPtr crtc) {
+    (*crtc->funcs->dpms)(crtc, DPMSModeOn);
+}
+
+#endif

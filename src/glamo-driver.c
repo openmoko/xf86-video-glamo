@@ -599,8 +599,10 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     GlamoEnterVT(scrnIndex, 0);
 
     xf86CrtcScreenInit(pScreen);
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0)
     xf86RandR12SetRotations(pScreen, RR_Rotate_0 | RR_Rotate_90 |
                                      RR_Rotate_180 | RR_Rotate_270);
+#endif
     /* colormap */
     if (!miCreateDefColormap(pScreen)) {
         xf86DrvMsg(scrnIndex, X_ERROR,
