@@ -125,7 +125,12 @@ typedef struct {
     short saved_clock_gen5_2;
     short saved_hostbus_2;
 
-    /* Use hardware acceleration */
+#ifdef JBT6K74_SET_STATE
+    char *jbt6k74_state_path;
+    char saved_jbt6k74_state[14];
+#endif
+
+/* Use hardware acceleration */
     Bool accel;
 } GlamoRec, *GlamoPtr;
 

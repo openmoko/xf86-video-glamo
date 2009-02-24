@@ -39,9 +39,10 @@
 
 #include "glamo.h"
 
-static const char *display_state_switch_path = "/sys/bus/spi/devices/spi2.0/state";
-static const char *display_state_vga = "normal";
-static const char *display_state_qvga = "qvga-normal";
+#ifdef JBT6K74_SET_STATE
+static const char jbt6k74_state_vga[] = "normal";
+static const char jbt6k74_state_qvga[] = "qvga-normal";
+#endif
 
 typedef struct _GlamoOutput {
    DisplayModePtr modes;
@@ -241,18 +242,21 @@ GlamoOutputModeSet(xf86OutputPtr output, DisplayModePtr mode,
 
 static void
 GlamoOutputCommit(xf86OutputPtr output) {
-    int fd = open(display_state_switch_path, O_WRONLY);
+#ifdef JBT6K74_SET_STATE
+    GlamoPtr pGlamo = GlamoPTR(output->scrn);
+    int fd = open(pGlamo->jbt6k74_state_path, O_WRONLY);
     if (fd != -1) {
         if(output->crtc->mode.HDisplay == 240 && output->crtc->mode.VDisplay == 320)
-            write(fd, display_state_qvga, strlen(display_state_qvga));
+            write(fd, jbt6k74_state_qvga, sizeof(jbt6k74_state_qvga));
         else
-            write(fd, display_state_vga, strlen(display_state_vga));
+            write(fd, jbt6k74_state_vga, sizeof(jbt6k74_state_vga));
         close(fd);
     } else {
         xf86DrvMsg(output->scrn->scrnIndex, X_ERROR,
-                   "Couldn't open %s to change display resolution: %s\n",
-                   display_state_switch_path, strerror(errno));
+                   "Couldn't open \"%s\" to change display resolution: %s\n",
+                   pGlamo->jbt6k74_state_path, strerror(errno));
     }
+#endif
 }
 
 static void GlamoOutputDestroy(xf86OutputPtr output) {

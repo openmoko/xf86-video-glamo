@@ -128,11 +128,17 @@ typedef enum {
 	OPTION_SHADOW_FB,
     OPTION_DEVICE,
 	OPTION_DEBUG,
+#ifdef JBT6K74_SET_STATE
+    OPTION_JBT6K74_STATE_PATH
+#endif
 } GlamoOpts;
 
 static const OptionInfoRec GlamoOptions[] = {
 	{ OPTION_SHADOW_FB,	"ShadowFB",	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_DEBUG,		"debug",	OPTV_BOOLEAN,	{0},	FALSE },
+#ifdef JBT6K74_SET_STATE
+	{ OPTION_JBT6K74_STATE_PATH, "StatePath", OPTV_STRING, {0}, FALSE },
+#endif
 	{ -1,			NULL,		OPTV_NONE,	{0},	FALSE }
 };
 
@@ -483,6 +489,13 @@ GlamoPreInit(ScrnInfoPtr pScrn, int flags)
 
     debug = xf86ReturnOptValBool(pGlamo->Options, OPTION_DEBUG, FALSE);
 
+#ifdef JBT6K74_SET_STATE
+    pGlamo->jbt6k74_state_path = xf86GetOptValString(pGlamo->Options,
+                                                     OPTION_JBT6K74_STATE_PATH);
+    if (pGlamo->jbt6k74_state_path == NULL)
+        pGlamo->jbt6k74_state_path = JBT6K74_STATE_PATH;
+#endif
+
     /* First approximation, may be refined in ScreenInit */
     pScrn->displayWidth = pScrn->virtualX;
 
@@ -724,6 +737,19 @@ static void
 GlamoSaveHW(ScrnInfoPtr pScrn) {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
     volatile char *mmio = pGlamo->reg_base;
+#if JBT6K74_SET_STATE
+    int fd;
+
+    fd = open(pGlamo->jbt6k74_state_path, O_RDONLY);
+    if (fd != -1) {
+       read(fd, pGlamo->saved_jbt6k74_state, 14);
+        close(fd);
+    } else {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                   "Couldn't open \"%s\" to save display resolution: %s\n",
+                   pGlamo->jbt6k74_state_path, strerror(errno));
+    }
+#endif
 
     pGlamo->saved_clock_2d = MMIO_IN16(mmio, GLAMO_REG_CLOCK_2D);
     pGlamo->saved_clock_isp = MMIO_IN16(mmio, GLAMO_REG_CLOCK_ISP);
@@ -736,13 +762,15 @@ GlamoSaveHW(ScrnInfoPtr pScrn) {
                    "Framebuffer ioctl FBIOGET_FSCREENINFO failed: %s",
                    strerror(errno));
     }
-
 }
 
 static void
 GlamoRestoreHW(ScrnInfoPtr pScrn) {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
     volatile char *mmio = pGlamo->reg_base;
+#ifdef JBT6K74_SET_STATE
+    int fd;
+#endif
 
     if (ioctl(pGlamo->fb_fd, FBIOPUT_VSCREENINFO, (void*)(&pGlamo->fb_saved_var)) == -1) {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -755,6 +783,18 @@ GlamoRestoreHW(ScrnInfoPtr pScrn) {
     MMIO_OUT16(mmio, GLAMO_REG_CLOCK_GEN5_1, pGlamo->saved_clock_gen5_1);
     MMIO_OUT16(mmio, GLAMO_REG_CLOCK_GEN5_2, pGlamo->saved_clock_gen5_2);
     MMIO_OUT16(mmio, GLAMO_REG_HOSTBUS(2), pGlamo->saved_hostbus_2);
+
+#ifdef JBT6K74_SET_STATE
+    fd = open(pGlamo->jbt6k74_state_path, O_WRONLY);
+    if (fd != -1) {
+        write(fd, pGlamo->saved_jbt6k74_state, 14);
+        close(fd);
+    } else {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                   "Couldn't open \"%s\" to restore display resolution: %s\n",
+                   pGlamo->jbt6k74_state_path, strerror(errno));
+    }
+#endif
 }
 
 static Bool
@@ -773,7 +813,6 @@ GlamoEnterVT(int scrnIndex, int flags) {
     return TRUE;
 }
 
-
 static void
 GlamoLeaveVT(int scrnIndex, int flags) {
     ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
@@ -784,3 +823,4 @@ GlamoLeaveVT(int scrnIndex, int flags) {
 
     GlamoRestoreHW(pScrn);
 }
+

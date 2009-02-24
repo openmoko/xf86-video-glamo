@@ -32,6 +32,12 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
+/* Set jbt6k74 state when changing resolution */
+#undef JBT6K74_SET_STATE
+
+/* Path to the jbt6k74 sysfs state path */
+#undef JBT6K74_STATE_PATH
+
 /* Name of package */
 #undef PACKAGE
 

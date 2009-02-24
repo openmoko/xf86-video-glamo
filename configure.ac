@@ -50,6 +50,17 @@ AC_ARG_ENABLE(pciaccess,     AS_HELP_STRING([--enable-pciaccess],
                              [Enable use of libpciaccess (default: disabled)]),
 			     [PCIACCESS=$enableval], [PCIACCESS=no])
 
+AC_ARG_ENABLE(jbt6k74-set-state, AS_HELP_STRING([--disable-jbt6k74-set-state],
+                                 [Whether the driver should set the jbt6k74
+                                 state when changing resolution  (default:
+                                 enabled)]),
+             [JBT6K74_SET_STATE=$enableval], [JBT6K74_SET_STATE=yes])
+
+AC_ARG_WITH(jbt6k74-state-path, AS_HELP_STRING([--with-jbt6k74-state-path=PATH],
+                                               [Path to the jbt6k74 sysfs state file [[default=/sys/bus/spi/devices/spi2.0/state]]]),
+           [JBT6K74_STATE_PATH="$withval"],
+           [JBT6K74_STATE_PATH="/sys/bus/spi/devices/spi2.0/state"])
+
 # Checks for extensions
 XORG_DRIVER_CHECK_EXT(RANDR, randrproto)
 XORG_DRIVER_CHECK_EXT(RENDER, renderproto)
@@ -64,6 +75,11 @@ if test "x$PCIACCESS" = xyes; then
     AC_DEFINE(PCIACCESS, 1, [Use libpciaccess])
     PKG_CHECK_MODULES([PCIACCESS], [pciaccess >= 0.8.0])
     XORG_CFLAGS="$XORG_CFLAGS $PCIACCESS_CFLAGS"
+fi
+
+if test "x$JBT6K74_SET_STATE" = xyes; then
+    AC_DEFINE(JBT6K74_SET_STATE, 1, [Set jbt6k74 state when changing resolution])
+    AC_DEFINE_UNQUOTED(JBT6K74_STATE_PATH, "$JBT6K74_STATE_PATH", [Path to the jbt6k74 sysfs state path])
 fi
 
 # Checks for libraries.
