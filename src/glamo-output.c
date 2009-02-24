@@ -174,7 +174,9 @@ GlamoOutputInit(ScrnInfoPtr pScrn) {
     ConvertModeFbToXfree(&pGlamo->fb_var, mode, NULL);
     xf86SetModeDefaultName(mode);
 
+    mode->type = M_T_PREFERRED | M_T_DRIVER;
     pGlamoOutput->modes = xf86ModesAdd(pGlamoOutput->modes, mode);
+
 
     /* This is a really really dirty hack. It assumes a configuration like on
      * the freerunner. It would be much better if there was a way to query the
@@ -182,6 +184,7 @@ GlamoOutputInit(ScrnInfoPtr pScrn) {
     mode = xf86DuplicateMode(mode);
     if (!mode)
         return;
+
 
     if (mode->VDisplay <= 320) {
         mode->HSyncStart = mode->HDisplay * 2 + (mode->HDisplay - mode->HSyncStart);
@@ -205,6 +208,8 @@ GlamoOutputInit(ScrnInfoPtr pScrn) {
 
     xf86SetModeCrtc(mode, 0);
     xf86SetModeDefaultName(mode);
+    mode->type = M_T_DRIVER;
+
     pGlamoOutput->modes = xf86ModesAdd(pGlamoOutput->modes, mode);
 }
 
