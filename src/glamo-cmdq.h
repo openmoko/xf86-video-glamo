@@ -135,8 +135,8 @@ tv_le(struct timeval *tv1, struct timeval *tv2)
 void
 GLAMOFlushCMDQCache(GlamoPtr pGlamo, Bool discard);
 
-Bool
-GLAMOCMDQInit(ScrnInfoPtr pScrn);
+size_t
+GLAMOCMDQInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size);
 
 Bool
 GLAMOCMDQEnable(ScrnInfoPtr pScrn);

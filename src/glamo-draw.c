@@ -75,7 +75,7 @@ static const CARD8 GLAMOBltRop[16] = {
  ********************************/
 
 static Bool
-GLAMODrawExaInit(ScrnInfoPtr pScrn);
+GLAMODrawExaInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size);
 
 Bool
 GLAMOExaPrepareSolid(PixmapPtr      pPixmap,
@@ -171,17 +171,22 @@ GLAMOWakeupHandler(pointer blockData, int result, pointer readmask)
 {
 }
 
-Bool
-GLAMODrawInit(ScrnInfoPtr pScrn)
+size_t
+GLAMODrawInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size)
 {
-    if (!GLAMODrawExaInit(pScrn))
-        return FALSE;
+    size_t mem_used;
 
-	if (!GLAMOCMDQInit(pScrn)) {
+    mem_used = GLAMOCMDQInit(pScrn, mem_start, mem_size);
+
+	if (!mem_used) {
         GLAMODrawFini(pScrn);
         return FALSE;
     }
-    return TRUE;
+
+    if (!GLAMODrawExaInit(pScrn, mem_start + mem_used, mem_size - mem_used))
+        return 0;
+
+    return mem_size;
 }
 
 void
@@ -203,7 +208,10 @@ GLAMODrawEnable(ScrnInfoPtr pScrn)
 
 	GLAMOEngineEnable(pGlamo, GLAMO_ENGINE_2D);
 	GLAMOEngineReset(pGlamo, GLAMO_ENGINE_2D);
-    GLAMOCMDQEnable(pScrn);
+    if (!GLAMOCMDQEnable(pScrn)) {
+        GLAMODrawDisable(pScrn);
+        return FALSE;
+    }
 
 	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
 
@@ -219,7 +227,7 @@ GLAMODrawDisable(ScrnInfoPtr pScrn) {
 }
 
 static Bool
-GLAMODrawExaInit(ScrnInfoPtr pScrn)
+GLAMODrawExaInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size)
 {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
 
@@ -233,10 +241,11 @@ GLAMODrawExaInit(ScrnInfoPtr pScrn)
     if(!exa)
         return FALSE;
 
-	exa->memoryBase = pGlamo->fbstart;
-	exa->memorySize = 1024 * 1024 * 4;
-	/*exa->offScreenBase = pGlamo->fboff;*/
-	exa->offScreenBase = 480 * 640 * 2;
+    pGlamo->exa->memoryBase = pGlamo->fbstart + mem_start;
+    pGlamo->exa->memorySize = mem_size;
+    /* TODO: Initalize offScreenBase based on the current screen resolution
+     * (width*height*depth) */
+    pGlamo->exa->offScreenBase = 480 * 640 * 2;
 
 	exa->exa_major = EXA_VERSION_MAJOR;
 	exa->exa_minor = EXA_VERSION_MINOR;
@@ -298,13 +307,24 @@ GLAMOExaPrepareSolid(PixmapPtr      pPix,
 	FbBits mask;
 	RING_LOCALS;
 
-	if (pPix->drawable.bitsPerPixel != 16)
-		GLAMO_FALLBACK(("Only 16bpp is supported\n"));
+/*	if (pPix->drawable.bitsPerPixel != 16)
+		GLAMO_FALLBACK(("Only 16bpp is supported\n"));*/
 
-	mask = FbFullMask(16);
+    mask = FbFullMask(16);
 	if ((pm & mask) != mask)
 		GLAMO_FALLBACK(("Can't do planemask 0x%08x\n",
 				(unsigned int) pm));
+    switch (pPix->drawable.bitsPerPixel) {
+        case 8:
+            if (pPix->devKind & 1)
+                return FALSE;
+            fg = (fg | fg << 8);
+        case 16:
+            break;
+        default:
+            return FALSE;
+            break;
+    }
 
 	op = GLAMOSolidRop[alu] << 8;
 	offset = exaGetPixmapOffset(pPix);
@@ -346,7 +366,6 @@ GLAMOExaDoneSolid(PixmapPtr pPix)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-
     GLAMOFlushCMDQCache(pGlamo, 1);
 	exaMarkSync(pGlamo->pScreen);
 }
@@ -420,7 +439,6 @@ GLAMOExaCopy(PixmapPtr       pDst,
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 
 	RING_LOCALS;
-
 	BEGIN_CMDQ(14);
 
 	OUT_REG(GLAMO_REG_2D_SRC_X, srcX);
@@ -438,7 +456,6 @@ GLAMOExaDoneCopy(PixmapPtr pDst)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-
     GLAMOFlushCMDQCache(pGlamo, 1);
 	exaMarkSync(pGlamo->pScreen);
 }
@@ -493,7 +510,6 @@ GLAMOExaUploadToScreen(PixmapPtr pDst,
 {
 	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-
 	int bpp, i;
 	CARD8 *dst_offset;
 	int dst_pitch;
@@ -521,12 +537,11 @@ GLAMOExaDownloadFromScreen(PixmapPtr pSrc,
 {
 	ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-
 	int bpp, i;
 	CARD8 *dst_offset, *src;
 	int src_pitch;
 
-	bpp = pSrc->drawable.bitsPerPixel;
+    bpp = pSrc->drawable.bitsPerPixel;
 	bpp /= 8;
 	src_pitch = pSrc->devKind;
 	src = pGlamo->exa->memoryBase + exaGetPixmapOffset(pSrc) +
@@ -547,7 +562,6 @@ GLAMOExaWaitMarker (ScreenPtr pScreen, int marker)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-
 	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
 }
 

@@ -93,10 +93,10 @@ typedef struct {
 	ScreenPtr 				pScreen;
 
 	ExaDriverPtr exa;
-	ExaOffscreenArea *exa_cmd_queue;
 
-	CARD16 *ring_addr; /* Beginning of ring buffer. */
-	int ring_len;
+    unsigned char *ring_addr; /* Beginning of ring buffer. */
+    size_t ring_start;
+	size_t ring_len;
 
 	/*
 	 * cmd queue cache in system memory
@@ -151,8 +151,8 @@ MMIOSetBitMask(volatile char *mmio, CARD32 reg, CARD16 mask, CARD16 val)
 }
 
 /* glamo_draw.c */
-Bool
-GLAMODrawInit(ScrnInfoPtr pScrn);
+size_t
+GLAMODrawInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_len);
 
 Bool
 GLAMODrawEnable(ScrnInfoPtr pScrn);

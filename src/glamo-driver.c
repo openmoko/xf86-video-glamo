@@ -522,6 +522,8 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     GlamoPtr pGlamo = GlamoPTR(pScrn);
     VisualPtr visual;
     int ret, flags;
+    size_t mem_start = 0;
+    size_t mem_size = 1024 * 1024 * 4;
 
     TRACE_ENTER("GlamoScreenInit");
 
@@ -594,7 +596,7 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
         xf86LoadSubModule(pScrn, "exa");
         xf86LoaderReqSymLists(exaSymbols, NULL);
 
-    	if (!GLAMODrawInit(pScrn)) {
+    	if (!GLAMODrawInit(pScrn, mem_start, mem_size)) {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                        "EXA hardware acceleration initialization failed\n");
         } else {
@@ -805,7 +807,7 @@ GlamoEnterVT(int scrnIndex, int flags) {
     GlamoSaveHW(pScrn);
 
     if (pGlamo->accel)
-        GLAMODrawEnable(pScrn);
+        pGlamo->accel = GLAMODrawEnable(pScrn);
 
     if (!xf86SetDesiredModes(pScrn))
         return FALSE;

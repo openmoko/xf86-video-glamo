@@ -330,33 +330,26 @@ GLAMODispatchCMDQCache(GlamoPtr pGlamo)
     /* Wrap around */
     if (ring_write >= new_ring_write) {
         rest_size = (ring_count - ring_write);
-        memcpy((char*)(pGlamo->ring_addr) + ring_write, addr, rest_size);
-        memcpy((char*)(pGlamo->ring_addr), addr+rest_size, count - rest_size);
+        memcpy(pGlamo->ring_addr + ring_write, addr, rest_size);
+        memcpy(pGlamo->ring_addr, addr+rest_size, count - rest_size);
 
         /* ring_write being 0 will result in a deadlock because the cmdq read
          * will never stop. To avoid such an behaviour insert an empty
          * instruction. */
         if (new_ring_write == 0) {
-            memset((char*)(pGlamo->ring_addr), 0, 4);
+            memset(pGlamo->ring_addr, 0, 4);
             new_ring_write = 4;
         }
 
-        /* Before changing write read has to stop */
-        GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_CMDQ, FALSE);
-
         /* The write position has to change to trigger a read */
         if (ring_write == new_ring_write) {
-            memset((char*)(pGlamo->ring_addr + new_ring_write), 0, 4);
+            memset(pGlamo->ring_addr + new_ring_write, 0, 4);
             new_ring_write += 4;
-/*            MMIO_OUT16(mmio, GLAMO_REG_CMDQ_WRITE_ADDRH,
-                       ((pGlamo->ring_write-4) >> 16) & CQ_MASKH);
-            MMIO_OUT16(mmio, GLAMO_REG_CMDQ_WRITE_ADDRL,
-                       (pGlamo->ring_write-4) & CQ_MASKL);*/
         }
     } else {
-        memcpy((char*)(pGlamo->ring_addr) + ring_write, addr, count);
-        GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_CMDQ, FALSE);
+        memcpy(pGlamo->ring_addr + ring_write, addr, count);
     }
+    GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_CMDQ, FALSE);
     MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
 					GLAMO_CLOCK_2D_EN_M6CLK,
 					0);
@@ -370,8 +363,6 @@ GLAMODispatchCMDQCache(GlamoPtr pGlamo)
                 GLAMO_CLOCK_2D_EN_M6CLK,
 					0xffff);
     buf->used = 0;
-
-    GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_ALL, FALSE);
 }
 
 void
@@ -384,17 +375,16 @@ static void
 GLAMOCMDQResetCP(GlamoPtr pGlamo)
 {
 	volatile char *mmio = pGlamo->reg_base;
-	CARD32 queue_offset = pGlamo->exa_cmd_queue->offset;
 
 	/* make the decoder happy? */
-	memset((char*)pGlamo->ring_addr, 0, pGlamo->ring_len);
+	memset(pGlamo->ring_addr, 0, pGlamo->ring_len);
 
 	GLAMOEngineReset(pGlamo, GLAMO_ENGINE_CMDQ);
 
 	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_BASE_ADDRL,
-		   queue_offset & 0xffff);
+		   pGlamo->ring_start & 0xffff);
 	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_BASE_ADDRH,
-		   (queue_offset >> 16) & 0x7f);
+		   (pGlamo->ring_start >> 16) & 0x7f);
 	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_LEN, CQ_LEN);
 
 	MMIO_OUT16(mmio, GLAMO_REG_CMDQ_WRITE_ADDRH, 0);
@@ -408,15 +398,18 @@ GLAMOCMDQResetCP(GlamoPtr pGlamo)
 	GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_ALL, FALSE);
 }
 
-Bool
-GLAMOCMDQInit(ScrnInfoPtr pScrn)
+size_t
+GLAMOCMDQInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size)
 {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
     MemBuf *buf;
 
+    pGlamo->ring_start = mem_start;
+    pGlamo->ring_addr = pGlamo->fbstart + pGlamo->ring_start;
+
     pGlamo->ring_len = (CQ_LEN + 1) * 1024;
 
-    buf = (MemBuf *)xcalloc(1, sizeof(MemBuf) + pGlamo->ring_len - 1);
+    buf = (MemBuf *)xcalloc(1, sizeof(MemBuf) + pGlamo->ring_len);
 
     if (!buf) {
         return FALSE;
@@ -425,27 +418,14 @@ GLAMOCMDQInit(ScrnInfoPtr pScrn)
 	buf->size = pGlamo->ring_len;
 	buf->used = 0;
 
-    pGlamo->exa_cmd_queue = exaOffscreenAlloc(pGlamo->pScreen, pGlamo->ring_len,
-				                              pGlamo->exa->pixmapOffsetAlign,
-                                              TRUE, NULL, NULL);
-
-    if (!pGlamo->exa_cmd_queue) {
-        xfree(buf);
-        return FALSE;
-    }
-
-    pGlamo->ring_addr = (CARD16 *)(pGlamo->fbstart + pGlamo->exa_cmd_queue->offset);
-
 	pGlamo->cmd_queue_cache = buf;
 
-    return TRUE;
+    return pGlamo->ring_len;
 }
 
 Bool
 GLAMOCMDQEnable(ScrnInfoPtr pScrn) {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
-
-    pGlamo->ring_addr =	(CARD16 *) (pGlamo->fbstart + pGlamo->exa_cmd_queue->offset);
 
     GLAMOEngineEnable(pGlamo, GLAMO_ENGINE_CMDQ);
     GLAMOCMDQResetCP(pGlamo);
@@ -470,10 +450,6 @@ GLAMOCMDQFini(ScrnInfoPtr pScrn) {
     if (pGlamo->cmd_queue_cache) {
 	    xfree(pGlamo->cmd_queue_cache);
 	    pGlamo->cmd_queue_cache = NULL;
-    }
-    if (pGlamo->exa_cmd_queue) {
-        exaOffscreenFree(pGlamo->pScreen, pGlamo->exa_cmd_queue);
-        pGlamo->exa_cmd_queue = NULL;
     }
 }
 
