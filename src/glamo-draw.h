@@ -28,7 +28,7 @@
 
 void GLAMOWaitIdle(GlamoPtr *pGlamo);
 
-#define GLAMO_TRACE_FALL 1
+#define GLAMO_TRACE_FALL 0
 #define GLAMO_TRACE_DRAW 1
 
 #if GLAMO_TRACE_FALL
