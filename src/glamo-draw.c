@@ -241,11 +241,11 @@ GLAMODrawExaInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size)
     if(!exa)
         return FALSE;
 
-    pGlamo->exa->memoryBase = pGlamo->fbstart + mem_start;
-    pGlamo->exa->memorySize = mem_size;
+    pGlamo->exa->memoryBase = pGlamo->fbstart;
+    pGlamo->exa->memorySize = mem_size + mem_start;
     /* TODO: Initalize offScreenBase based on the current screen resolution
      * (width*height*depth) */
-    pGlamo->exa->offScreenBase = 480 * 640 * 2;
+    pGlamo->exa->offScreenBase = mem_start;
 
 	exa->exa_major = EXA_VERSION_MAJOR;
 	exa->exa_minor = EXA_VERSION_MINOR;

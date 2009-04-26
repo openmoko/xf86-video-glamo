@@ -522,8 +522,8 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     GlamoPtr pGlamo = GlamoPTR(pScrn);
     VisualPtr visual;
     int ret, flags;
-    size_t mem_start = 0;
-    size_t mem_size = 1024 * 1024 * 4;
+    size_t mem_start = 640 * 480 * 2;
+    size_t mem_size = 1024 * 1024 * 4 - mem_start;
 
     TRACE_ENTER("GlamoScreenInit");
 
