@@ -33,16 +33,16 @@
 #define RING_LOCALS	CARD16 *__head; int __count
 #define BEGIN_CMDQ(n)							\
 do {									\
-	if ((pGlamo->cmd_queue_cache->used + 2 * (n)) >			\
-	    pGlamo->cmd_queue_cache->size) {				\
-		GLAMOFlushCMDQCache(pGlamo, 1);				\
+	if ((pGlamo->cmd_queue->used + 2 * (n)) >			\
+	    pGlamo->cmd_queue->size) {				\
+		GLAMODispatchCMDQ(pGlamo);				\
 	}								\
-	__head = (CARD16 *)((char *)pGlamo->cmd_queue_cache->data +	\
-	    pGlamo->cmd_queue_cache->used);				\
+	__head = (CARD16 *)((char *)pGlamo->cmd_queue->data +	\
+	    pGlamo->cmd_queue->used);				\
 	__count = 0;							\
 } while (0)
 #define END_CMDQ() do {							\
-	pGlamo->cmd_queue_cache->used += __count * 2;			\
+	pGlamo->cmd_queue->used += __count * 2;			\
 } while (0)
 
 #define OUT_BURST_REG(reg, val) do {                                   \
@@ -60,12 +60,12 @@ do {                                                                   \
 	CARD16 *__head; int __count, __total, __reg, __packet0count
 #define BEGIN_CMDQ(n)							\
 do {									\
-	if ((pGlamo->cmd_queue_cache->used + 2 * (n)) >			\
-	    pGlamo->cmd_queue_cache->size) {				\
-		GLAMOFlushCMDQCache(pGlamo, 1);				\
+	if ((pGlamo->cmd_queue->used + 2 * (n)) >			\
+	    pGlamo->cmd_queue->size) {				\
+		GLAMODispatchCMDQ(pGlamo);				\
 	}								\
-	__head = (CARD16 *)((char *)pGlamo->cmd_queue_cache->data +	\
-	    pGlamo->cmd_queue_cache->used);				\
+	__head = (CARD16 *)((char *)pGlamo->cmd_queue->data +	\
+	    pGlamo->cmd_queue->used);				\
 	__count = 0;							\
 	__total = n;							\
 	__reg = 0;								\
@@ -75,7 +75,7 @@ do {									\
 	if (__count != __total)						\
 		FatalError("count != total (%d vs %d) at %s:%d\n",	 \
 		     __count, __total, __FILE__, __LINE__);		\
-	pGlamo->cmd_queue_cache->used += __count * 2;			\
+	pGlamo->cmd_queue->used += __count * 2;			\
 } while (0)
 
 #define OUT_BURST_REG(reg, val) do {                                   \
@@ -133,7 +133,7 @@ tv_le(struct timeval *tv1, struct timeval *tv2)
 
 
 void
-GLAMOFlushCMDQCache(GlamoPtr pGlamo, Bool discard);
+GLAMODispatchCMDQ(GlamoPtr pGlamo);
 
 size_t
 GLAMOCMDQInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size);
@@ -146,30 +146,6 @@ GLAMOCMDQDisable(ScrnInfoPtr pScrn);
 
 void
 GLAMOCMDQFini(ScrnInfoPtr pScrn);
-
-enum GLAMOEngine {
-	GLAMO_ENGINE_CMDQ,
-	GLAMO_ENGINE_ISP,
-	GLAMO_ENGINE_2D,
-	GLAMO_ENGINE_MPEG,
-	GLAMO_ENGINE_ALL,
-	NB_GLAMO_ENGINES /*should be the last entry*/
-};
-
-void
-GLAMOEngineEnable(GlamoPtr pGlamo, enum GLAMOEngine engine);
-
-void
-GLAMOEngineDisable(GlamoPtr pGlamo, enum GLAMOEngine engine);
-
-void
-GLAMOEngineReset(GlamoPtr pGlamo, enum GLAMOEngine engine);
-
-int
-GLAMOEngineBusy(GlamoPtr pGlamo, enum GLAMOEngine engine);
-
-void
-GLAMOEngineWait(GlamoPtr pGlamo, enum GLAMOEngine engine);
 
 #endif /* _GLAMO_DMA_H_ */
 

@@ -31,7 +31,7 @@
 #include "glamo.h"
 #include "glamo-regs.h"
 #include "glamo-cmdq.h"
-#include "glamo-draw.h"
+#include "glamo-engine.h"
 
 static void
 GLAMOCMDQResetCP(GlamoPtr pGlamo);
@@ -66,235 +66,9 @@ GLAMODebugFifo(GlamoPtr pGlamo)
 #endif
 
 void
-GLAMOEngineReset(GlamoPtr pGlamo, enum GLAMOEngine engine)
+GLAMODispatchCMDQ(GlamoPtr pGlamo)
 {
-	CARD32 reg;
-	CARD16 mask;
-	volatile char *mmio = pGlamo->reg_base;
-
-	if (!mmio)
-		return;
-
-	switch (engine) {
-		case GLAMO_ENGINE_CMDQ:
-			reg = GLAMO_REG_CLOCK_2D;
-			mask = GLAMO_CLOCK_2D_CMDQ_RESET;
-			break;
-		case GLAMO_ENGINE_ISP:
-			reg = GLAMO_REG_CLOCK_ISP;
-			mask = GLAMO_CLOCK_ISP2_RESET;
-			break;
-		case GLAMO_ENGINE_2D:
-			reg = GLAMO_REG_CLOCK_2D;
-			mask = GLAMO_CLOCK_2D_RESET;
-			break;
-		default:
-			return;
-			break;
-	}
-	MMIOSetBitMask(mmio, reg, mask, 0xffff);
-    sleep(1);
-    MMIOSetBitMask(mmio, reg, mask, 0);
-    sleep(1);
-}
-
-void
-GLAMOEngineDisable(GlamoPtr pGlamo, enum GLAMOEngine engine)
-{
-	volatile char *mmio = pGlamo->reg_base;
-
-	if (!mmio)
-		return;
-
-    switch (engine) {
-		case GLAMO_ENGINE_CMDQ:
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
-					GLAMO_CLOCK_2D_EN_M6CLK,
-					0);
-			MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
-					GLAMO_HOSTBUS2_MMIO_EN_CMDQ,
-					0);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_1,
-					GLAMO_CLOCK_GEN51_EN_DIV_MCLK,
-					0);
-			break;
-		case GLAMO_ENGINE_ISP:
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_ISP,
-					GLAMO_CLOCK_ISP_EN_M2CLK |
-					GLAMO_CLOCK_ISP_EN_I1CLK,
-					0);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_2,
-					GLAMO_CLOCK_GEN52_EN_DIV_ICLK,
-					0);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_1,
-					GLAMO_CLOCK_GEN51_EN_DIV_JCLK,
-					0);
-			MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
-					GLAMO_HOSTBUS2_MMIO_EN_ISP,
-					0);
-			break;
-		case GLAMO_ENGINE_2D:
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
-					GLAMO_CLOCK_2D_EN_M7CLK |
-					GLAMO_CLOCK_2D_EN_GCLK |
-					GLAMO_CLOCK_2D_DG_M7CLK |
-					GLAMO_CLOCK_2D_DG_GCLK,
-					0);
-			MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
-					GLAMO_HOSTBUS2_MMIO_EN_2D,
-					0);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_1,
-					GLAMO_CLOCK_GEN51_EN_DIV_GCLK,
-					0);
-			break;
-		default:
-			break;
-	}
-}
-
-void
-GLAMOEngineEnable(GlamoPtr pGlamo, enum GLAMOEngine engine)
-{
-	volatile char *mmio = pGlamo->reg_base;
-
-	if (!mmio)
-		return;
-
-	switch (engine) {
-		case GLAMO_ENGINE_CMDQ:
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
-					GLAMO_CLOCK_2D_EN_M6CLK,
-					0xffff);
-			MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
-					GLAMO_HOSTBUS2_MMIO_EN_CMDQ,
-					0xffff);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_1,
-					GLAMO_CLOCK_GEN51_EN_DIV_MCLK,
-					0xffff);
-			break;
-		case GLAMO_ENGINE_ISP:
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_ISP,
-					GLAMO_CLOCK_ISP_EN_M2CLK |
-					GLAMO_CLOCK_ISP_EN_I1CLK,
-					0xffff);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_2,
-					GLAMO_CLOCK_GEN52_EN_DIV_ICLK,
-					0xffff);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_1,
-					GLAMO_CLOCK_GEN51_EN_DIV_JCLK,
-					0xffff);
-			MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
-					GLAMO_HOSTBUS2_MMIO_EN_ISP,
-					0xffff);
-			break;
-		case GLAMO_ENGINE_2D:
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
-					GLAMO_CLOCK_2D_EN_M7CLK |
-					GLAMO_CLOCK_2D_EN_GCLK |
-					GLAMO_CLOCK_2D_DG_M7CLK |
-					GLAMO_CLOCK_2D_DG_GCLK,
-					0xffff);
-			MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
-					GLAMO_HOSTBUS2_MMIO_EN_2D,
-					0xffff);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_1,
-					GLAMO_CLOCK_GEN51_EN_DIV_GCLK,
-					0xffff);
-			break;
-		default:
-			break;
-	}
-}
-
-int
-GLAMOEngineBusy(GlamoPtr pGlamo, enum GLAMOEngine engine)
-{
-	volatile char *mmio = pGlamo->reg_base;
-	CARD16 status, mask, val;
-
-	if (!mmio)
-		return FALSE;
-
-	if (pGlamo->cmd_queue_cache != NULL)
-		GLAMOFlushCMDQCache(pGlamo, 0);
-
-	switch (engine)
-	{
-		case GLAMO_ENGINE_CMDQ:
-			mask = 0x3;
-			val  = mask;
-			break;
-		case GLAMO_ENGINE_ISP:
-			mask = 0x3 | (1 << 8);
-			val  = 0x3;
-			break;
-		case GLAMO_ENGINE_2D:
-			mask = 0x3 | (1 << 4);
-			val  = 0x3;
-			break;
-		case GLAMO_ENGINE_ALL:
-		default:
-			mask = 1 << 2;
-			val  = mask;
-			break;
-	}
-
-	status = MMIO_IN16(mmio, GLAMO_REG_CMDQ_STATUS);
-
-	return !((status & mask) == val);
-}
-
-static void
-GLAMOEngineWaitReal(GlamoPtr pGlamo,
-		   enum GLAMOEngine engine,
-		   Bool do_flush)
-{
-	volatile char *mmio = pGlamo->reg_base;
-	CARD16 status, mask, val;
-
-	if (!mmio)
-		return;
-
-	if (pGlamo->cmd_queue_cache != NULL && do_flush)
-		GLAMOFlushCMDQCache(pGlamo, 0);
-
-	switch (engine)
-	{
-		case GLAMO_ENGINE_CMDQ:
-			mask = 0x3;
-			val  = mask;
-			break;
-		case GLAMO_ENGINE_ISP:
-			mask = 0x3 | (1 << 8);
-			val  = 0x3;
-			break;
-		case GLAMO_ENGINE_2D:
-			mask = 0x3 | (1 << 4);
-			val  = 0x3;
-			break;
-		case GLAMO_ENGINE_ALL:
-		default:
-			mask = 1 << 2;
-			val  = mask;
-			break;
-	}
-
-	do {
-		status = MMIO_IN16(mmio, GLAMO_REG_CMDQ_STATUS);
-    } while ((status & mask) != val);
-}
-
-void
-GLAMOEngineWait(GlamoPtr pGlamo,
-		enum GLAMOEngine engine)
-{
-	GLAMOEngineWaitReal(pGlamo, engine, TRUE);
-}
-
-static void
-GLAMODispatchCMDQCache(GlamoPtr pGlamo)
-{
-    MemBuf *buf = pGlamo->cmd_queue_cache;
+    MemBuf *buf = pGlamo->cmd_queue;
 	volatile char *mmio = pGlamo->reg_base;
 	char *addr;
 	size_t count, ring_count;
@@ -349,7 +123,7 @@ GLAMODispatchCMDQCache(GlamoPtr pGlamo)
     } else {
         memcpy(pGlamo->ring_addr + ring_write, addr, count);
     }
-    GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_CMDQ, FALSE);
+    GLAMOEngineWait(pGlamo, GLAMO_ENGINE_CMDQ);
     MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
 					GLAMO_CLOCK_2D_EN_M6CLK,
 					0);
@@ -363,12 +137,6 @@ GLAMODispatchCMDQCache(GlamoPtr pGlamo)
                 GLAMO_CLOCK_2D_EN_M6CLK,
 					0xffff);
     buf->used = 0;
-}
-
-void
-GLAMOFlushCMDQCache(GlamoPtr pGlamo, Bool discard)
-{
-	GLAMODispatchCMDQCache(pGlamo);
 }
 
 static void
@@ -395,7 +163,7 @@ GLAMOCMDQResetCP(GlamoPtr pGlamo)
 			 1 << 12 |
 			 5 << 8 |
 			 8 << 4);
-	GLAMOEngineWaitReal(pGlamo, GLAMO_ENGINE_ALL, FALSE);
+	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
 }
 
 size_t
@@ -418,7 +186,7 @@ GLAMOCMDQInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size)
 	buf->size = pGlamo->ring_len;
 	buf->used = 0;
 
-	pGlamo->cmd_queue_cache = buf;
+	pGlamo->cmd_queue = buf;
 
     return pGlamo->ring_len;
 }
@@ -447,9 +215,9 @@ GLAMOCMDQFini(ScrnInfoPtr pScrn) {
 
     GLAMOCMDQDisable(pScrn);
 
-    if (pGlamo->cmd_queue_cache) {
-	    xfree(pGlamo->cmd_queue_cache);
-	    pGlamo->cmd_queue_cache = NULL;
+    if (pGlamo->cmd_queue) {
+	    xfree(pGlamo->cmd_queue);
+	    pGlamo->cmd_queue = NULL;
     }
 }
 

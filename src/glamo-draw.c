@@ -31,6 +31,7 @@
 #include "glamo-regs.h"
 #include "glamo-cmdq.h"
 #include "glamo-draw.h"
+#include "glamo-engine.h"
 
 static const CARD8 GLAMOSolidRop[16] = {
     /* GXclear      */      0x00,         /* 0 */
@@ -212,7 +213,6 @@ GLAMODrawEnable(ScrnInfoPtr pScrn)
         GLAMODrawDisable(pScrn);
         return FALSE;
     }
-
 	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
 
     return TRUE;
@@ -366,7 +366,7 @@ GLAMOExaDoneSolid(PixmapPtr pPix)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-    GLAMOFlushCMDQCache(pGlamo, 1);
+    GLAMODispatchCMDQ(pGlamo);
 	exaMarkSync(pGlamo->pScreen);
 }
 
@@ -456,7 +456,7 @@ GLAMOExaDoneCopy(PixmapPtr pDst)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-    GLAMOFlushCMDQCache(pGlamo, 1);
+    GLAMODispatchCMDQ(pGlamo);
 	exaMarkSync(pGlamo->pScreen);
 }
 
@@ -562,6 +562,7 @@ GLAMOExaWaitMarker (ScreenPtr pScreen, int marker)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
+    GLAMODispatchCMDQ(pGlamo);
 	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
 }
 

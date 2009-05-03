@@ -99,11 +99,11 @@ typedef struct {
 	size_t ring_len;
 
 	/*
-	 * cmd queue cache in system memory
+	 * cmd queue in system memory
 	 * It is to be flushed to cmd_queue_space
 	 * "at once", when we are happy with it.
 	 */
-	MemBuf *cmd_queue_cache;
+	MemBuf *cmd_queue;
 
 	/* What was GLAMOCardInfo */
 	volatile char *reg_base;
