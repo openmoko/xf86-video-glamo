@@ -24,9 +24,6 @@
  * OF THIS SOFTWARE.
  */
 
-#include <sys/time.h>
-#include <unistd.h>
-
 #include "glamo-log.h"
 #include "glamo.h"
 #include "glamo-regs.h"

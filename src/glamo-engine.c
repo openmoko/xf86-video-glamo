@@ -20,8 +20,11 @@
  * OF THIS SOFTWARE.
  */
 
+#include <unistd.h>
+
 #include "glamo.h"
 #include "glamo-engine.h"
+#include "glamo-regs.h"
 
 void
 GLAMOEngineReset(GlamoPtr pGlamo, enum GLAMOEngine engine)
