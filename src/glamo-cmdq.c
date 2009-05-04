@@ -120,7 +120,9 @@ GLAMODispatchCMDQ(GlamoPtr pGlamo)
     } else {
         memcpy(pGlamo->ring_addr + ring_write, addr, count);
     }
-    GLAMOEngineWait(pGlamo, GLAMO_ENGINE_CMDQ);
+    /* In Theory waiting for the CMDQ to be ready should be enough, but
+     * unfortunally this causes visual artifacts sometimes */
+    GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
     MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
 					GLAMO_CLOCK_2D_EN_M6CLK,
 					0);
