@@ -132,6 +132,8 @@ typedef struct {
 
 /* Use hardware acceleration */
     Bool accel;
+
+    uint16_t *colormap;
 } GlamoRec, *GlamoPtr;
 
 #define GlamoPTR(p) ((GlamoPtr)((p)->driverPrivate))

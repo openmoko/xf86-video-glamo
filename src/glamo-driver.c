@@ -93,7 +93,10 @@ GlamoEnterVT(int scrnIndex, int flags);
 static void
 GlamoLeaveVT(int scrnIndex, int flags);
 
-/* -------------------------------------------------------------------- */
+static void
+GlamoLoadColormap(ScrnInfoPtr pScrn, int numColors, int *indices,
+        LOCO *colors, VisualPtr pVisual);
+ /* -------------------------------------------------------------------- */
 
 static const xf86CrtcConfigFuncsRec glamo_crtc_config_funcs = {
     .resize = GlamoCrtcResize
@@ -174,10 +177,6 @@ static const char *fbdevHWSymbols[] = {
 	"fbdevHWLoadPalette",
 	"fbdevHWMapVidmem",
 	"fbdevHWUnmapVidmem",
-
-	/* colormap */
-	"fbdevHWLoadPalette",
-	"fbdevHWLoadPaletteWeak",
 
 	/* ScrnInfo hooks */
 	"fbdevHWAdjustFrameWeak",
@@ -418,9 +417,9 @@ GlamoPreInit(ScrnInfoPtr pScrn, int flags)
 
     pGlamo->pEnt = xf86GetEntityInfo(pScrn->entityList[0]);
 
-    pScrn->racMemFlags = RAC_FB | RAC_COLORMAP | RAC_CURSOR | RAC_VIEWPORT;
+    pScrn->racMemFlags = RAC_FB | RAC_CURSOR | RAC_VIEWPORT;
     /* XXX Is this right?  Can probably remove RAC_FB */
-    pScrn->racIoFlags = RAC_FB | RAC_COLORMAP | RAC_CURSOR | RAC_VIEWPORT;
+    pScrn->racIoFlags = RAC_FB | RAC_CURSOR | RAC_VIEWPORT;
 
     fb_device = xf86FindOptionValue(pGlamo->pEnt->device->options, "Device");
 
@@ -619,6 +618,7 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
                                      RR_Rotate_180 | RR_Rotate_270);
 #endif
     /* colormap */
+    pGlamo->colormap = NULL;
     if (!miCreateDefColormap(pScreen)) {
         xf86DrvMsg(scrnIndex, X_ERROR,
                    "internal error: miCreateDefColormap failed "
@@ -627,7 +627,7 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     }
 
     flags = CMAP_PALETTED_TRUECOLOR;
-    if (!xf86HandleColormaps(pScreen, 256, 8, fbdevHWLoadPaletteWeak(),
+    if (!xf86HandleColormaps(pScreen, 256, 8, GlamoLoadColormap,
                              NULL, flags))
         return FALSE;
 
@@ -658,6 +658,11 @@ GlamoCloseScreen(int scrnIndex, ScreenPtr pScreen)
 
     fbdevHWUnmapVidmem(pScrn);
     GlamoUnmapMMIO(pScrn);
+
+    if (pGlamo->colormap) {
+        xfree(pGlamo->colormap);
+        pGlamo->colormap = NULL;
+    }
 
     pScrn->vtSema = FALSE;
 
@@ -824,5 +829,26 @@ GlamoLeaveVT(int scrnIndex, int flags) {
         GLAMODrawDisable(pScrn);
 
     GlamoRestoreHW(pScrn);
+}
+
+static void
+GlamoLoadColormap(ScrnInfoPtr pScrn, int numColors, int *indices,
+        LOCO *colors, VisualPtr pVisual) {
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+    int i;
+    ErrorF("%s:%s[%d]\n", __FILE__, __func__, __LINE__);
+
+    if (pGlamo->colormap) {
+        xfree (pGlamo->colormap);
+    }
+
+    pGlamo->colormap = xalloc (sizeof(uint16_t) * numColors);
+
+    for (i = 0; i < numColors; ++i) {
+        pGlamo->colormap[i] =
+            ((colors[indices[i]].red << 8) & 0xf700) |
+            ((colors[indices[i]].green << 3) & 0x7e0) |
+            (colors[indices[i]].blue >> 3);
+    }
 }
 

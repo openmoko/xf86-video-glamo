@@ -307,25 +307,13 @@ GLAMOExaPrepareSolid(PixmapPtr      pPix,
 	FbBits mask;
 	RING_LOCALS;
 
-/*	if (pPix->drawable.bitsPerPixel != 16)
-		GLAMO_FALLBACK(("Only 16bpp is supported\n"));*/
+	if (pPix->drawable.bitsPerPixel != 16)
+		GLAMO_FALLBACK(("Only 16bpp is supported\n"));
 
     mask = FbFullMask(16);
 	if ((pm & mask) != mask)
 		GLAMO_FALLBACK(("Can't do planemask 0x%08x\n",
 				(unsigned int) pm));
-    switch (pPix->drawable.bitsPerPixel) {
-        case 8:
-            if (pPix->devKind & 1)
-                return FALSE;
-            fg = (fg | fg << 8);
-        case 16:
-            break;
-        default:
-            return FALSE;
-            break;
-    }
-
 	op = GLAMOSolidRop[alu] << 8;
 	offset = exaGetPixmapOffset(pPix);
 	pitch = pPix->devKind;
