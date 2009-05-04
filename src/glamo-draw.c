@@ -316,7 +316,7 @@ GLAMOExaPrepareSolid(PixmapPtr      pPix,
 				(unsigned int) pm));
 	op = GLAMOSolidRop[alu] << 8;
 	offset = exaGetPixmapOffset(pPix);
-	pitch = pPix->devKind;
+	pitch = exaGetPixmapPitch(pPix);
 
 	BEGIN_CMDQ(16);
 	OUT_REG(GLAMO_REG_2D_DST_ADDRL, offset & 0xffff);
@@ -388,10 +388,10 @@ GLAMOExaPrepareCopy(PixmapPtr       pSrc,
 	}
 
 	src_offset = exaGetPixmapOffset(pSrc);
-	src_pitch = pSrc->devKind;
+	src_pitch = exaGetPixmapPitch(pSrc);
 
 	dst_offset = exaGetPixmapOffset(pDst);
-	dst_pitch = pDst->devKind;
+	dst_pitch = exaGetPixmapPitch(pDst);
 
 	op = GLAMOBltRop[alu] << 8;
 
@@ -503,7 +503,7 @@ GLAMOExaUploadToScreen(PixmapPtr pDst,
 	int dst_pitch;
 
 	bpp = pDst->drawable.bitsPerPixel / 8;
-	dst_pitch = pDst->devKind;
+	dst_pitch = exaGetPixmapPitch(pDst);
 	dst_offset = pGlamo->exa->memoryBase + exaGetPixmapOffset(pDst)
 						+ x*bpp + y*dst_pitch;
 
@@ -531,7 +531,7 @@ GLAMOExaDownloadFromScreen(PixmapPtr pSrc,
 
     bpp = pSrc->drawable.bitsPerPixel;
 	bpp /= 8;
-	src_pitch = pSrc->devKind;
+	src_pitch = exaGetPixmapPitch(pSrc);
 	src = pGlamo->exa->memoryBase + exaGetPixmapOffset(pSrc) +
 						x*bpp + y*src_pitch;
 	dst_offset = (unsigned char*)dst;
