@@ -496,24 +496,26 @@ GLAMOExaUploadToScreen(PixmapPtr pDst,
 		       char *src,
 		       int src_pitch)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	int bpp, i;
-	CARD8 *dst_offset;
-	int dst_pitch;
+    ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+    int bpp, i;
+    CARD8 *dst_offset;
+    int dst_pitch;
 
-	bpp = pDst->drawable.bitsPerPixel / 8;
-	dst_pitch = exaGetPixmapPitch(pDst);
-	dst_offset = pGlamo->exa->memoryBase + exaGetPixmapOffset(pDst)
-						+ x*bpp + y*dst_pitch;
+    exaWaitSync(pScrn->pScreen);
 
-	for (i = 0; i < h; i++) {
-		memcpy(dst_offset, src, w*bpp);
-		dst_offset += dst_pitch;
-		src += src_pitch;
-	}
+    bpp = pDst->drawable.bitsPerPixel / 8;
+    dst_pitch = exaGetPixmapPitch(pDst);
+    dst_offset = pGlamo->exa->memoryBase + exaGetPixmapOffset(pDst)
+                    + x*bpp + y*dst_pitch;
 
-	return TRUE;
+    for (i = 0; i < h; i++) {
+        memcpy(dst_offset, src, w*bpp);
+        dst_offset += dst_pitch;
+        src += src_pitch;
+    }
+
+    return TRUE;
 }
 
 Bool
@@ -523,26 +525,27 @@ GLAMOExaDownloadFromScreen(PixmapPtr pSrc,
 			   char *dst,
 			   int dst_pitch)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	int bpp, i;
-	CARD8 *dst_offset, *src;
-	int src_pitch;
+    ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
+    GlamoPtr pGlamo = GlamoPTR(pScrn);
+    int bpp, i;
+    CARD8 *dst_offset, *src;
+    int src_pitch;
 
-    bpp = pSrc->drawable.bitsPerPixel;
-	bpp /= 8;
-	src_pitch = exaGetPixmapPitch(pSrc);
-	src = pGlamo->exa->memoryBase + exaGetPixmapOffset(pSrc) +
-						x*bpp + y*src_pitch;
-	dst_offset = (unsigned char*)dst;
+    exaWaitSync(pScrn->pScreen);
 
-	for (i = 0; i < h; i++) {
-		memcpy(dst_offset, src, w*bpp);
-		dst_offset += dst_pitch;
-		src += src_pitch;
-	}
+    bpp = pSrc->drawable.bitsPerPixel / 8;
+    src_pitch = exaGetPixmapPitch(pSrc);
+    src = pGlamo->exa->memoryBase + exaGetPixmapOffset(pSrc) +
+            x*bpp + y*src_pitch;
+    dst_offset = (unsigned char*)dst;
 
-	return TRUE;
+    for (i = 0; i < h; i++) {
+        memcpy(dst_offset, src, w*bpp);
+        dst_offset += dst_pitch;
+        src += src_pitch;
+    }
+
+    return TRUE;
 }
 
 void
