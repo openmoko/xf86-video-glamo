@@ -778,18 +778,22 @@ GlamoRestoreHW(ScrnInfoPtr pScrn) {
 #ifdef JBT6K74_SET_STATE
     int fd;
 #endif
-
     if (ioctl(pGlamo->fb_fd, FBIOPUT_VSCREENINFO, (void*)(&pGlamo->fb_saved_var)) == -1) {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                    "Framebuffer ioctl FBIOSET_FSCREENINFO failed: %s",
                    strerror(errno));
     }
-
-    MMIO_OUT16(mmio, GLAMO_REG_CLOCK_2D, pGlamo->saved_clock_2d);
-    MMIO_OUT16(mmio, GLAMO_REG_CLOCK_ISP, pGlamo->saved_clock_isp);
-    MMIO_OUT16(mmio, GLAMO_REG_CLOCK_GEN5_1, pGlamo->saved_clock_gen5_1);
-    MMIO_OUT16(mmio, GLAMO_REG_CLOCK_GEN5_2, pGlamo->saved_clock_gen5_2);
-    MMIO_OUT16(mmio, GLAMO_REG_HOSTBUS(2), pGlamo->saved_hostbus_2);
+    MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
+        GLAMO_CLOCK_2D_EN_M6CLK | GLAMO_CLOCK_2D_EN_M7CLK |
+        GLAMO_CLOCK_2D_EN_GCLK | GLAMO_CLOCK_2D_DG_M7CLK |
+        GLAMO_CLOCK_2D_DG_GCLK,
+        pGlamo->saved_clock_2d);
+    MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_1,
+        GLAMO_CLOCK_GEN51_EN_DIV_MCLK |  GLAMO_CLOCK_GEN51_EN_DIV_GCLK,
+        pGlamo->saved_clock_gen5_1);
+    MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
+        GLAMO_HOSTBUS2_MMIO_EN_CMDQ | GLAMO_HOSTBUS2_MMIO_EN_2D,
+        pGlamo->saved_hostbus_2);
 
 #ifdef JBT6K74_SET_STATE
     fd = open(pGlamo->jbt6k74_state_path, O_WRONLY);
