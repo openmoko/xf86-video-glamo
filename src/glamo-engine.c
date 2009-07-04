@@ -75,9 +75,6 @@ GLAMOEngineDisable(GlamoPtr pGlamo, enum GLAMOEngine engine)
 			MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
 					GLAMO_HOSTBUS2_MMIO_EN_CMDQ,
 					0);
-			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_GEN5_1,
-					GLAMO_CLOCK_GEN51_EN_DIV_MCLK,
-					0);
 			break;
 		case GLAMO_ENGINE_ISP:
 			MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_ISP,
