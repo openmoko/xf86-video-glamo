@@ -204,8 +204,7 @@ void
 GLAMOCMDQDisable(ScrnInfoPtr pScrn) {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
 
-/*  Causes WSOD for some users.
-    GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL); */
+	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
     GLAMOEngineDisable(pGlamo, GLAMO_ENGINE_CMDQ);
 }
 
