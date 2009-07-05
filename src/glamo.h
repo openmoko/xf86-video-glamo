@@ -38,8 +38,6 @@
 #include "exa.h"
 #include <linux/fb.h>
 
-#define HAVE_ENGINE_IOCTLS
-
 #define GLAMO_REG_BASE(c)		((c)->attr.address[0])
 #define GLAMO_REG_SIZE(c)		(0x2400)
 

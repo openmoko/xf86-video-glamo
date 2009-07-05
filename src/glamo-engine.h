@@ -24,7 +24,8 @@
 #ifdef HAVE_ENGINE_IOCTLS
 #include <linux/glamofb.h>
 
-typedef GLAMOEngine glamo_engine;
+#define GLAMOEngine glamo_engine
+#define GLAMO_ENGINE_ALL __NUM_GLAMO_ENGINES
 
 #else
 
