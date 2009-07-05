@@ -26,7 +26,7 @@
 #include "glamo-engine.h"
 #include "glamo-regs.h"
 
-#ifdef HAS_ENGINE_IOCTLS
+#ifdef HAVE_ENGINE_IOCTLS
 #   include <linux/types.h>
 #   include <sys/ioctl.h>
 #   include <errno.h>
@@ -35,7 +35,7 @@
 void
 GLAMOEngineReset(GlamoPtr pGlamo, enum GLAMOEngine engine)
 {
-#ifdef HAS_ENGINE_IOCTLS
+#ifdef HAVE_ENGINE_IOCTLS
     if (ioctl(pGlamo->fb_fd, GLAMOFB_ENGINE_RESET, (void*)((__u32)engine)) == -1)
         xf86DrvMsg(xf86Screens[pGlamo->pScreen->myNum]->scrnIndex, X_ERROR,
                   "Framebuffer ioctl GLAMOFB_ENGINE_RESET failed: %s\n",
@@ -75,7 +75,7 @@ GLAMOEngineReset(GlamoPtr pGlamo, enum GLAMOEngine engine)
 void
 GLAMOEngineDisable(GlamoPtr pGlamo, enum GLAMOEngine engine)
 {
-#ifdef HAS_ENGINE_IOCTLS
+#ifdef HAVE_ENGINE_IOCTLS
     if (ioctl(pGlamo->fb_fd, GLAMOFB_ENGINE_DISABLE, (void*)((__u32)engine)) == -1)
         xf86DrvMsg(xf86Screens[pGlamo->pScreen->myNum]->scrnIndex, X_ERROR,
                   "Framebuffer ioctl GLAMOFB_ENGINE_DISABLE failed: %s\n",
@@ -133,7 +133,7 @@ GLAMOEngineDisable(GlamoPtr pGlamo, enum GLAMOEngine engine)
 void
 GLAMOEngineEnable(GlamoPtr pGlamo, enum GLAMOEngine engine)
 {
-#ifdef HAS_ENGINE_IOCTLS
+#ifdef HAVE_ENGINE_IOCTLS
     if (ioctl(pGlamo->fb_fd, GLAMOFB_ENGINE_ENABLE, (void*)((__u32)engine)) == -1)
         xf86DrvMsg(xf86Screens[pGlamo->pScreen->myNum]->scrnIndex, X_ERROR,
                   "Framebuffer ioctl GLAMOFB_ENGINE_ENABLE failed: %s\n",

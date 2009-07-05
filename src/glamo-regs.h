@@ -727,7 +727,7 @@ enum glamo_register_mpeg {
       GLAMO_REG_MPEG_DEC_RB1          = REG_MPEG(0xcc),
 };
 
-#endif /* #ifndef HAS_ENGINE_IOCTLS */
+#endif /* #ifndef HAVE_ENGINE_IOCTLS */
 
 #define REG_CMDQ(x)           (GLAMO_REGOFS_CMDQUEUE+(x))
 

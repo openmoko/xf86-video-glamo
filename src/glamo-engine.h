@@ -21,7 +21,7 @@
 
 #include <stdbool.h>
 
-#ifdef HAS_ENGINE_IOCTLS
+#ifdef HAVE_ENGINE_IOCTLS
 #include <linux/glamofb.h>
 
 typedef GLAMOEngine glamo_engine;
@@ -36,7 +36,7 @@ enum GLAMOEngine {
 	GLAMO_ENGINE_ALL,
 	NB_GLAMO_ENGINES /*should be the last entry*/
 };
-#endif /* #ifdef HAS_ENGINE_IOCTLS */
+#endif /* #ifdef HAVE_ENGINE_IOCTLS */
 
 void
 GLAMOEngineEnable(GlamoPtr pGlamo, enum GLAMOEngine engine);

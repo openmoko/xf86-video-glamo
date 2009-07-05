@@ -743,7 +743,7 @@ fail2:
 static void
 GlamoSaveHW(ScrnInfoPtr pScrn) {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
-#ifndef HAS_ENGINE_IOCTLS
+#ifndef HAVE_ENGINE_IOCTLS
     volatile char *mmio = pGlamo->reg_base;
 #endif
 #if JBT6K74_SET_STATE
@@ -760,7 +760,7 @@ GlamoSaveHW(ScrnInfoPtr pScrn) {
     }
 #endif
 
-#ifndef HAS_ENGINE_IOCTLS
+#ifndef HAVE_ENGINE_IOCTLS
     pGlamo->saved_clock_2d = MMIO_IN16(mmio, GLAMO_REG_CLOCK_2D);
     pGlamo->saved_clock_isp = MMIO_IN16(mmio, GLAMO_REG_CLOCK_ISP);
     pGlamo->saved_clock_gen5_1 = MMIO_IN16(mmio, GLAMO_REG_CLOCK_GEN5_1);
@@ -778,7 +778,7 @@ GlamoSaveHW(ScrnInfoPtr pScrn) {
 static void
 GlamoRestoreHW(ScrnInfoPtr pScrn) {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
-#ifndef HAS_ENGINE_IOCTLS
+#ifndef HAVE_ENGINE_IOCTLS
     volatile char *mmio = pGlamo->reg_base;
 #endif
 #ifdef JBT6K74_SET_STATE
@@ -791,7 +791,7 @@ GlamoRestoreHW(ScrnInfoPtr pScrn) {
                    strerror(errno));
     }
 
-#ifndef HAS_ENGINE_IOCTLS
+#ifndef HAVE_ENGINE_IOCTLS
     MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
         GLAMO_CLOCK_2D_EN_M6CLK | GLAMO_CLOCK_2D_EN_M7CLK |
         GLAMO_CLOCK_2D_EN_GCLK | GLAMO_CLOCK_2D_DG_M7CLK |
