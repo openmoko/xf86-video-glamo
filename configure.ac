@@ -58,6 +58,11 @@ AC_ARG_WITH(jbt6k74-state-path, AS_HELP_STRING([--with-jbt6k74-state-path=PATH],
            [JBT6K74_STATE_PATH="$withval"],
            [JBT6K74_STATE_PATH="/sys/bus/spi/devices/spi2.0/state"])
 
+AC_ARG_ENABLE(engine-ioctls, AS_HELP_STRING([--enable-engine-ioctls],
+                                 [Whether the driver should use framebuffer
+                                 ioctls to enable/disable engines. This requires
+                                 kernel support. (default: disabled)]),
+             [HAVE_ENGINE_IOCTLS=$enableval], [HAVE_ENGINE_IOCTLS=no])
 # Checks for extensions
 XORG_DRIVER_CHECK_EXT(RANDR, randrproto)
 XORG_DRIVER_CHECK_EXT(RENDER, renderproto)
@@ -70,6 +75,10 @@ sdkdir=$(pkg-config --variable=sdkdir xorg-server)
 if test "x$JBT6K74_SET_STATE" = xyes; then
     AC_DEFINE(JBT6K74_SET_STATE, 1, [Set jbt6k74 state when changing resolution])
     AC_DEFINE_UNQUOTED(JBT6K74_STATE_PATH, "$JBT6K74_STATE_PATH", [Path to the jbt6k74 sysfs state path])
+fi
+
+if test "x$HAVE_ENGINE_IOCTLS" = xyes; then
+    AC_DEFINE(HAVE_ENGINE_IOCTLS, 1, [Use ioctls to enable/disable engines])
 fi
 
 # Checks for libraries.

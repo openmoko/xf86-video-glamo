@@ -23,6 +23,8 @@
  * MA 02111-1307 USA
  */
 
+
+
 enum glamo_regster_offsets {
 	GLAMO_REGOFS_GENERIC	= 0x0000,
 	GLAMO_REGOFS_HOSTBUS	= 0x0200,
@@ -41,6 +43,8 @@ enum glamo_regster_offsets {
 	GLAMO_REGOFS_3D		= 0x1b00,
 };
 
+/* The Xorg driver is only allowed to touch 2D engine and cmdq engine registers */
+#ifndef HAS_ENGINE_ENABLE_IOCTL
 
 enum glamo_register_generic {
 	GLAMO_REG_GCONF1	= 0x0000,
@@ -722,6 +726,8 @@ enum glamo_register_mpeg {
       GLAMO_REG_MPEG_DEC_RB0          = REG_MPEG(0xca),
       GLAMO_REG_MPEG_DEC_RB1          = REG_MPEG(0xcc),
 };
+
+#endif /* #ifndef HAS_ENGINE_IOCTLS */
 
 #define REG_CMDQ(x)           (GLAMO_REGOFS_CMDQUEUE+(x))
 

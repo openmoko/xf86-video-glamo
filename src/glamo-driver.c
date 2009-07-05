@@ -743,7 +743,9 @@ fail2:
 static void
 GlamoSaveHW(ScrnInfoPtr pScrn) {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
+#ifndef HAS_ENGINE_IOCTLS
     volatile char *mmio = pGlamo->reg_base;
+#endif
 #if JBT6K74_SET_STATE
     int fd;
 
@@ -758,11 +760,13 @@ GlamoSaveHW(ScrnInfoPtr pScrn) {
     }
 #endif
 
+#ifndef HAS_ENGINE_IOCTLS
     pGlamo->saved_clock_2d = MMIO_IN16(mmio, GLAMO_REG_CLOCK_2D);
     pGlamo->saved_clock_isp = MMIO_IN16(mmio, GLAMO_REG_CLOCK_ISP);
     pGlamo->saved_clock_gen5_1 = MMIO_IN16(mmio, GLAMO_REG_CLOCK_GEN5_1);
     pGlamo->saved_clock_gen5_2 = MMIO_IN16(mmio, GLAMO_REG_CLOCK_GEN5_2);
     pGlamo->saved_hostbus_2 = MMIO_IN16(mmio, GLAMO_REG_HOSTBUS(2));
+#endif
 
     if (ioctl(pGlamo->fb_fd, FBIOGET_VSCREENINFO, (void*)(&pGlamo->fb_saved_var)) == -1) {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -774,15 +778,20 @@ GlamoSaveHW(ScrnInfoPtr pScrn) {
 static void
 GlamoRestoreHW(ScrnInfoPtr pScrn) {
     GlamoPtr pGlamo = GlamoPTR(pScrn);
+#ifndef HAS_ENGINE_IOCTLS
     volatile char *mmio = pGlamo->reg_base;
+#endif
 #ifdef JBT6K74_SET_STATE
     int fd;
 #endif
+
     if (ioctl(pGlamo->fb_fd, FBIOPUT_VSCREENINFO, (void*)(&pGlamo->fb_saved_var)) == -1) {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                    "Framebuffer ioctl FBIOSET_FSCREENINFO failed: %s",
                    strerror(errno));
     }
+
+#ifndef HAS_ENGINE_IOCTLS
     MMIOSetBitMask(mmio, GLAMO_REG_CLOCK_2D,
         GLAMO_CLOCK_2D_EN_M6CLK | GLAMO_CLOCK_2D_EN_M7CLK |
         GLAMO_CLOCK_2D_EN_GCLK | GLAMO_CLOCK_2D_DG_M7CLK |
@@ -794,6 +803,7 @@ GlamoRestoreHW(ScrnInfoPtr pScrn) {
     MMIOSetBitMask(mmio, GLAMO_REG_HOSTBUS(2),
         GLAMO_HOSTBUS2_MMIO_EN_CMDQ | GLAMO_HOSTBUS2_MMIO_EN_2D,
         pGlamo->saved_hostbus_2);
+#endif
 
 #ifdef JBT6K74_SET_STATE
     fd = open(pGlamo->jbt6k74_state_path, O_WRONLY);

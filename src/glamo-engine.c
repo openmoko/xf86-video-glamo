@@ -26,9 +26,21 @@
 #include "glamo-engine.h"
 #include "glamo-regs.h"
 
+#ifdef HAS_ENGINE_IOCTLS
+#   include <linux/types.h>
+#   include <sys/ioctl.h>
+#   include <errno.h>
+#endif
+
 void
 GLAMOEngineReset(GlamoPtr pGlamo, enum GLAMOEngine engine)
 {
+#ifdef HAS_ENGINE_IOCTLS
+    if (ioctl(pGlamo->fb_fd, GLAMOFB_ENGINE_RESET, (void*)((__u32)engine)) == -1)
+        xf86DrvMsg(xf86Screens[pGlamo->pScreen->myNum]->scrnIndex, X_ERROR,
+                  "Framebuffer ioctl GLAMOFB_ENGINE_RESET failed: %s\n",
+                 strerror(errno));
+#else
 	CARD32 reg;
 	CARD16 mask;
 	volatile char *mmio = pGlamo->reg_base;
@@ -57,11 +69,18 @@ GLAMOEngineReset(GlamoPtr pGlamo, enum GLAMOEngine engine)
     sleep(1);
     MMIOSetBitMask(mmio, reg, mask, 0);
     sleep(1);
+#endif
 }
 
 void
 GLAMOEngineDisable(GlamoPtr pGlamo, enum GLAMOEngine engine)
 {
+#ifdef HAS_ENGINE_IOCTLS
+    if (ioctl(pGlamo->fb_fd, GLAMOFB_ENGINE_DISABLE, (void*)((__u32)engine)) == -1)
+        xf86DrvMsg(xf86Screens[pGlamo->pScreen->myNum]->scrnIndex, X_ERROR,
+                  "Framebuffer ioctl GLAMOFB_ENGINE_DISABLE failed: %s\n",
+                 strerror(errno));
+#else
 	volatile char *mmio = pGlamo->reg_base;
 
 	if (!mmio)
@@ -108,11 +127,18 @@ GLAMOEngineDisable(GlamoPtr pGlamo, enum GLAMOEngine engine)
 		default:
 			break;
 	}
+#endif
 }
 
 void
 GLAMOEngineEnable(GlamoPtr pGlamo, enum GLAMOEngine engine)
 {
+#ifdef HAS_ENGINE_IOCTLS
+    if (ioctl(pGlamo->fb_fd, GLAMOFB_ENGINE_ENABLE, (void*)((__u32)engine)) == -1)
+        xf86DrvMsg(xf86Screens[pGlamo->pScreen->myNum]->scrnIndex, X_ERROR,
+                  "Framebuffer ioctl GLAMOFB_ENGINE_ENABLE failed: %s\n",
+                 strerror(errno));
+#else
 	volatile char *mmio = pGlamo->reg_base;
 
 	if (!mmio)
@@ -162,6 +188,7 @@ GLAMOEngineEnable(GlamoPtr pGlamo, enum GLAMOEngine engine)
 		default:
 			break;
 	}
+#endif
 }
 
 bool

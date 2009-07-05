@@ -38,6 +38,8 @@
 #include "exa.h"
 #include <linux/fb.h>
 
+#define HAS_ENGINE_IOCTLS
+
 #define GLAMO_REG_BASE(c)		((c)->attr.address[0])
 #define GLAMO_REG_SIZE(c)		(0x2400)
 
@@ -118,12 +120,14 @@ typedef struct {
 	unsigned char *fbmem;
 	int fboff;
 
+#ifndef HAS_ENGINE_IOCTLS
     /* save hardware registers */
     short saved_clock_2d;
     short saved_clock_isp;
     short saved_clock_gen5_1;
     short saved_clock_gen5_2;
     short saved_hostbus_2;
+#endif
 
 #ifdef JBT6K74_SET_STATE
     char *jbt6k74_state_path;
