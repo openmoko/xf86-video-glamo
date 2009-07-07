@@ -145,59 +145,6 @@ static const OptionInfoRec GlamoOptions[] = {
 	{ -1,			NULL,		OPTV_NONE,	{0},	FALSE }
 };
 
-/* -------------------------------------------------------------------- */
-
-static const char *fbSymbols[] = {
-	"fbScreenInit",
-	"fbPictureInit",
-	NULL
-};
-
-static const char *shadowSymbols[] = {
-	"shadowAdd",
-	"shadowInit",
-	"shadowSetup",
-	"shadowUpdatePacked",
-	"shadowUpdatePackedWeak",
-	"shadowUpdateRotatePacked",
-	"shadowUpdateRotatePackedWeak",
-	NULL
-};
-
-static const char *fbdevHWSymbols[] = {
-	"fbdevHWInit",
-	"fbdevHWProbe",
-
-	"fbdevHWGetDepth",
-	"fbdevHWGetLineLength",
-	"fbdevHWGetName",
-	"fbdevHWGetType",
-	"fbdevHWGetVidmem",
-	"fbdevHWLinearOffset",
-	"fbdevHWLoadPalette",
-	"fbdevHWMapVidmem",
-	"fbdevHWUnmapVidmem",
-
-	/* ScrnInfo hooks */
-	"fbdevHWAdjustFrameWeak",
-	"fbdevHWSaveScreen",
-	"fbdevHWSaveScreenWeak",
-	"fbdevHWValidModeWeak",
-
-	"fbdevHWDPMSSet",
-	"fbdevHWDPMSSetWeak",
-
-	NULL
-};
-
-static const char *exaSymbols[] = {
-    "exaDriverAlloc",
-    "exaDriverInit",
-    "exaDriverFini",
-    NULL
-};
-
-
 #ifdef XFree86LOADER
 
 MODULESETUPPROTO(GlamoSetup);
@@ -226,8 +173,6 @@ GlamoSetup(pointer module, pointer opts, int *errmaj, int *errmin)
 	if (!setupDone) {
 		setupDone = TRUE;
 		xf86AddDriver(&Glamo, module, 0);
-		LoaderRefSymLists(fbSymbols,
-				  shadowSymbols, fbdevHWSymbols, exaSymbols, NULL);
 		return (pointer)1;
 	} else {
 		if (errmaj) *errmaj = LDR_ONCEONLY;
@@ -352,8 +297,6 @@ GlamoProbe(DriverPtr drv, int flags)
 
 	if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
 		return FALSE;
-
-	xf86LoaderReqSymLists(fbdevHWSymbols, NULL);
 
 	for (i = 0; i < numDevSections; i++) {
 		dev = xf86FindOptionValue(devSections[i]->options, "Device");
@@ -507,7 +450,6 @@ GlamoPreInit(ScrnInfoPtr pScrn, int flags)
         GlamoFreeRec(pScrn);
         return FALSE;
     }
-    xf86LoaderReqSymLists(fbSymbols, NULL);
 
     TRACE_EXIT("PreInit");
     return TRUE;
@@ -593,7 +535,6 @@ GlamoScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     if (GlamoMapMMIO(pScrn)) {
 
         xf86LoadSubModule(pScrn, "exa");
-        xf86LoaderReqSymLists(exaSymbols, NULL);
 
     	if (!GLAMODrawInit(pScrn, mem_start, mem_size)) {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
