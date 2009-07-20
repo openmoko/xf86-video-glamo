@@ -292,42 +292,71 @@ GlamoProbe(DriverPtr drv, int flags)
 	if (flags & PROBE_DETECT)
 		return FALSE;
 
-	if ((numDevSections = xf86MatchDevice(GLAMO_DRIVER_NAME, &devSections)) <= 0)
+	numDevSections = xf86MatchDevice(GLAMO_DRIVER_NAME, &devSections);
+	if (numDevSections <= 0)
 		return FALSE;
 
-	if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
-		return FALSE;
+	/* Is today a good day to use KMS? */
+	if ( GlamoKernelModesettingAvailable(pScrn) ) {
 
-	for (i = 0; i < numDevSections; i++) {
-		dev = xf86FindOptionValue(devSections[i]->options, "Device");
-		if (fbdevHWProbe(NULL, dev, NULL)) {
-			int entity;
-			pScrn = NULL;
+		foundScreen = TRUE;
 
-			entity = xf86ClaimFbSlot(drv, 0, devSections[i], TRUE);
-			pScrn = xf86ConfigFbEntity(pScrn,0,entity,
-			                           NULL, NULL, NULL, NULL);
+		pScrn->driverVersion = GLAMO_VERSION;
+		pScrn->driverName    = GLAMO_DRIVER_NAME;
+		pScrn->name          = GLAMO_NAME;
+		pScrn->PreInit       = GlamoKMSPreInit;
+		pScrn->ScreenInit    = GlamoKMSScreenInit;
+		pScrn->SwitchMode    = GlamoKMSSwitchMode;
+		pScrn->AdjustFrame   = GlamoKMSAdjustFrame;
+		pScrn->EnterVT       = GlamoKMSEnterVT;
+		pScrn->LeaveVT       = GlamoKMSLeaveVT;
+		pScrn->ValidMode     = GlamoKMSValidMode;
 
-			if (pScrn) {
-				foundScreen = TRUE;
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using KMS!");
 
-				pScrn->driverVersion = GLAMO_VERSION;
-				pScrn->driverName    = GLAMO_DRIVER_NAME;
-				pScrn->name          = GLAMO_NAME;
-				pScrn->Probe         = GlamoProbe;
-				pScrn->PreInit       = GlamoPreInit;
-				pScrn->ScreenInit    = GlamoScreenInit;
-				pScrn->SwitchMode    = GlamoSwitchMode;
-				pScrn->AdjustFrame   = fbdevHWAdjustFrameWeak();
-				pScrn->EnterVT       = GlamoEnterVT;
-				pScrn->LeaveVT       = GlamoLeaveVT;
-				pScrn->ValidMode     = fbdevHWValidModeWeak();
+	} else {
 
-				xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-					   "using %s\n", dev ? dev : "default device");
+		if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
+			return FALSE;
+
+		for (i = 0; i < numDevSections; i++) {
+			dev = xf86FindOptionValue(devSections[i]->options,
+			                          "Device");
+			if (fbdevHWProbe(NULL, dev, NULL)) {
+				int entity;
+				pScrn = NULL;
+
+				entity = xf86ClaimFbSlot(drv, 0, devSections[i],
+				                         TRUE);
+				pScrn = xf86ConfigFbEntity(pScrn,0,entity, NULL,
+					                   NULL, NULL, NULL);
+
+				if (pScrn) {
+					foundScreen = TRUE;
+
+					pScrn->driverVersion = GLAMO_VERSION;
+					pScrn->driverName    = GLAMO_DRIVER_NAME;
+					pScrn->name          = GLAMO_NAME;
+					pScrn->Probe         = GlamoProbe;
+					pScrn->PreInit       = GlamoPreInit;
+					pScrn->ScreenInit    = GlamoScreenInit;
+					pScrn->SwitchMode    = GlamoSwitchMode;
+					pScrn->AdjustFrame
+					             = fbdevHWAdjustFrameWeak();
+					pScrn->EnterVT       = GlamoEnterVT;
+					pScrn->LeaveVT       = GlamoLeaveVT;
+					pScrn->ValidMode
+					             = fbdevHWValidModeWeak();
+
+					xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+						   "using %s\n",
+						   dev ? dev : "default device");
+				}
 			}
 		}
+
 	}
+
 	xfree(devSections);
 	TRACE("probe done");
 	return foundScreen;
@@ -806,4 +835,3 @@ GlamoLoadColormap(ScrnInfoPtr pScrn, int numColors, int *indices,
             (colors[indices[i]].blue >> 3);
     }
 }
-
