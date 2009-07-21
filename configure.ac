@@ -82,6 +82,8 @@ if test "x$HAVE_ENGINE_IOCTLS" = xyes; then
 fi
 
 # Checks for libraries.
+PKG_CHECK_MODULES(DRI, [libdrm xf86driproto])
+CFLAGS="$XORG_CFLAGS $DRI_CFLAGS"
 
 # Checks for header files.
 AC_HEADER_STDC

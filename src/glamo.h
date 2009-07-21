@@ -178,4 +178,17 @@ GlamoCrtcInit(ScrnInfoPtr pScrn);
 void
 GlamoOutputInit(ScrnInfoPtr pScrn);
 
+
+/* glamo-driver.c */
+extern Bool GlamoGetRec(ScrnInfoPtr pScrn);
+extern void GlamoFreeRec(ScrnInfoPtr pScrn);
+
+
+/* crtc.c */
+extern void crtc_init(ScrnInfoPtr pScrn);
+
+
+/* output.c */
+extern void output_init(ScrnInfoPtr pScrn);
+
 #endif /* _GLAMO_H_ */

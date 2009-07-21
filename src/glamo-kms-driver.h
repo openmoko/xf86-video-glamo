@@ -26,9 +26,9 @@ extern Bool GlamoKernelModesettingAvailable();
 extern Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags);
 extern Bool GlamoKMSScreenInit(int scrnIndex, ScreenPtr pScreen, int argc,
                                char **argv);
-extern Bool SwitchMode(int scrnIndex, DisplayModePtr mode, int flags);
-extern void AdjustFrame(int scrnIndex, int x, int y, int flags);
-extern Bool EnterVT(int scrnIndex, int flags);
-extern void LeaveVT(int scrnIndex, int flags);
-extern ModeStatus ValidMode(int scrnIndex, DisplayModePtr mode, Bool verbose,
-                            int flags);
+extern Bool GlamoKMSSwitchMode(int scrnIndex, DisplayModePtr mode, int flags);
+extern void GlamoKMSAdjustFrame(int scrnIndex, int x, int y, int flags);
+extern Bool GlamoKMSEnterVT(int scrnIndex, int flags);
+extern void GlamoKMSLeaveVT(int scrnIndex, int flags);
+extern ModeStatus GlamoKMSValidMode(int scrnIndex, DisplayModePtr mode,
+                                    Bool verbose, int flags);

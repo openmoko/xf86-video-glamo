@@ -37,7 +37,7 @@
 
 #include "glamo.h"
 #include "glamo-regs.h"
-#include "glamo-kms.driver.h"
+#include "glamo-kms-driver.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -183,7 +183,7 @@ GlamoSetup(pointer module, pointer opts, int *errmaj, int *errmin)
 
 #endif /* XFree86LOADER */
 
-static Bool
+Bool
 GlamoGetRec(ScrnInfoPtr pScrn)
 {
 	if (pScrn->driverPrivate != NULL)
@@ -193,7 +193,7 @@ GlamoGetRec(ScrnInfoPtr pScrn)
 	return TRUE;
 }
 
-static void
+void
 GlamoFreeRec(ScrnInfoPtr pScrn)
 {
 	if (pScrn->driverPrivate == NULL)
@@ -298,9 +298,11 @@ GlamoProbe(DriverPtr drv, int flags)
 		return FALSE;
 
 	/* Is today a good day to use KMS? */
-	if ( GlamoKernelModesettingAvailable(pScrn) ) {
+	if ( GlamoKernelModesettingAvailable() ) {
 
 		foundScreen = TRUE;
+
+		pScrn = xf86AllocateScreen(drv, 0);
 
 		/* Plug in KMS functions instead of the conventional ones */
 		pScrn->driverVersion = GLAMO_VERSION;
@@ -317,8 +319,6 @@ GlamoProbe(DriverPtr drv, int flags)
 		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using KMS!");
 
 	} else {
-
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Not using KMS");
 
 		if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
 			return FALSE;
@@ -355,6 +355,10 @@ GlamoProbe(DriverPtr drv, int flags)
 					xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 						   "using %s\n",
 						   dev ? dev : "default device");
+
+					xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+					           "Not using KMS");
+
 				}
 			}
 		}

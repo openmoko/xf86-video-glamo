@@ -54,7 +54,25 @@
 #include <sys/types.h>
 #include <dirent.h>
 
+#include <xorg-server.h>
+#include <drm.h>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+
 #include "xf86.h"
+#include "xf86Crtc.h"
+#include "xf86str.h"
+#include "xf86RAC.h"
+#include "xf86drm.h"
+
+#include "glamo.h"
+
+
+static const char *fbSymbols[] = {
+    "fbPictureInit",
+    "fbScreenInit",
+    NULL
+};
 
 
 static int modesettingEntityIndex = -1;
@@ -78,30 +96,54 @@ Bool GlamoKernelModesettingAvailable()
 			return TRUE;
 		}
 
-	} while ( ent )
+	} while ( ent );
 
 	closedir(dir);
 	return FALSE;
 }
 
 
+static Bool crtc_resize(ScrnInfoPtr pScrn, int width, int height)
+{
+#if 0
+    modesettingPtr ms = modesettingPTR(pScrn);
+    ScreenPtr pScreen = pScrn->pScreen;
+    PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
+    Bool fbAccessDisabled;
+    CARD8 *fbstart;
+
+    if (width == pScrn->virtualX && height == pScrn->virtualY)
+	return TRUE;
+
+    ErrorF("RESIZING TO %dx%d\n", width, height);
+
+    pScrn->virtualX = width;
+    pScrn->virtualY = height;
+
+    /* HW dependent - FIXME */
+    pScrn->displayWidth = pScrn->virtualX;
+
+    drmModeRmFB(ms->fd, ms->fb_id);
+
+    /* now create new frontbuffer */
+    return CreateFrontBuffer(pScrn);
+#endif
+	return FALSE;
+}
+
+
+static const xf86CrtcConfigFuncsRec crtc_config_funcs = {
+    crtc_resize
+};
+
+
 Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags)
 {
 	xf86CrtcConfigPtr xf86_config;
 	GlamoPtr pGlamo;
-	MessageType from = X_PROBED;
 	rgb defaultWeight = { 0, 0, 0 };
-	EntityInfoPtr pEnt;
-	EntPtr glamoEnt = NULL;
-	char *BusID;
-	int i;
-	char *s;
-	int num_pipe;
 	int max_width, max_height;
-
-	if ( pScrn->numEntities != 1 ) return FALSE;
-
-	pEnt = xf86GetEntityInfo(pScrn->entityList[0]);
+	Gamma zeros = { 0.0, 0.0, 0.0 };
 
 	/* Can't do this yet */
 	if ( flags & PROBE_DETECT ) {
@@ -113,46 +155,24 @@ Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags)
 	if ( !GlamoGetRec(pScrn) ) return FALSE;
 	pGlamo = GlamoPTR(pScrn);
 	pGlamo->SaveGeneration = -1;
-	pGlamo->pEnt = pEnt;
 
-	pScrn->displayWidth = 640;	       /* default it */
+	pScrn->displayWidth = 24;	/* Nonsense default value */
 
-	/* Allocate an entity private if necessary */
-	if ( xf86IsEntityShared(pScrn->entityList[0]) ) {
-		msEnt = xf86GetEntityPrivate(pScrn->entityList[0],
-		                             modesettingEntityIndex)->ptr;
-		pGlamo->entityPrivate = msEnt;
-	} else {
-		pGlamo->entityPrivate = NULL;
-	}
-
-	if ( xf86RegisterResources(ms->pEnt->index, NULL, ResNone) ) {
-		return FALSE;
-	}
-
-	if ( xf86IsEntityShared(pScrn->entityList[0]) ) {
-		if ( xf86IsPrimInitDone(pScrn->entityList[0]) ) {
-			/* do something */
-		} else {
-		    xf86SetPrimInitDone(pScrn->entityList[0]);
-		}
-	}
-
+	/* Open DRM */
 	pGlamo->drm_fd = drmOpen(NULL, "platform:glamo-fb");
-
-	if ( ms->fd < 0 ) return FALSE;
+	if ( pGlamo->drm_fd < 0 ) return FALSE;
 
 	pScrn->racMemFlags = RAC_FB | RAC_COLORMAP;
 	pScrn->monitor = pScrn->confScreen->monitor;
 	pScrn->progClock = TRUE;
 	pScrn->rgbBits = 8;
 
-	if ( !xf86SetDepthBpp (pScrn, 0, 0, 0
-	                       PreferConvert24to32
-	                       | SupportConvert24to32
-	                       | Support32bppFb))
-	return FALSE;
+	if ( !xf86SetDepthBpp(pScrn, 0, 0, 0, PreferConvert24to32
+	                       | SupportConvert24to32 | Support32bppFb) ) {
+		return FALSE;
+	}
 
+	/* We can only handle 16bpp */
 	if ( pScrn->depth != 16 ) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 		           "Given depth (%d) is not supported by the driver\n",
@@ -164,49 +184,27 @@ Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags)
 	if ( !xf86SetWeight(pScrn, defaultWeight, defaultWeight) ) return FALSE;
 	if ( !xf86SetDefaultVisual(pScrn, -1) ) return FALSE;
 
-	/* Process the options */
-	xf86CollectOptions(pScrn, NULL);
-	if ( !(ms->Options = xalloc(sizeof(Options))) ) return FALSE;
-	memcpy(ms->Options, Options, sizeof(Options));
-	xf86ProcessOptions(pScrn->scrnIndex, pScrn->options, ms->Options);
-
 	/* Allocate an xf86CrtcConfig */
 	xf86CrtcConfigInit(pScrn, &crtc_config_funcs);
 	xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 
-	max_width = 8192;
-	max_height = 8192;
+	max_width = 480;
+	max_height = 640;
 	xf86CrtcSetSizeRange(pScrn, 320, 200, max_width, max_height);
-
-	if (xf86ReturnOptValBool(ms->Options, OPTION_SW_CURSOR, FALSE)) {
-		ms->SWCursor = TRUE;
-	}
-
-	SaveHWState(pScrn);
 
 	crtc_init(pScrn);
 	output_init(pScrn);
 
-	if (!xf86InitialConfiguration(pScrn, TRUE)) {
+	if ( !xf86InitialConfiguration(pScrn, TRUE) ) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "No valid modes.\n");
-		RestoreHWState(pScrn);
 		return FALSE;
 	}
 
-	RestoreHWState(pScrn);
-
-	/*
-	 * If the driver can do gamma correction, it should call xf86SetGamma() here.
-	 */
-	{
-	Gamma zeros = { 0.0, 0.0, 0.0 };
-
-	if (!xf86SetGamma(pScrn, zeros)) {
+	if ( !xf86SetGamma(pScrn, zeros) ) {
 	    return FALSE;
 	}
-	}
 
-	if (pScrn->modes == NULL) {
+	if ( pScrn->modes == NULL ) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "No modes.\n");
 		return FALSE;
 	}
