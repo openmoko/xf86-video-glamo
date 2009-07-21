@@ -35,4 +35,5 @@ glamo_drv_la_SOURCES = \
          glamo-draw.c \
          glamo-display.c \
          glamo-output.c \
-         glamo-engine.c
+         glamo-engine.c \
+         glamo-kms-driver.c

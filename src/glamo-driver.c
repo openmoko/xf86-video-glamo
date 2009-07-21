@@ -37,6 +37,7 @@
 
 #include "glamo.h"
 #include "glamo-regs.h"
+#include "glamo-kms.driver.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -301,6 +302,7 @@ GlamoProbe(DriverPtr drv, int flags)
 
 		foundScreen = TRUE;
 
+		/* Plug in KMS functions instead of the conventional ones */
 		pScrn->driverVersion = GLAMO_VERSION;
 		pScrn->driverName    = GLAMO_DRIVER_NAME;
 		pScrn->name          = GLAMO_NAME;
@@ -315,6 +317,8 @@ GlamoProbe(DriverPtr drv, int flags)
 		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using KMS!");
 
 	} else {
+
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Not using KMS");
 
 		if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
 			return FALSE;

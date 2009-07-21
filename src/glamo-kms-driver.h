@@ -20,6 +20,9 @@
  *
  */
 
+#include "xf86.h"
+
+extern Bool GlamoKernelModesettingAvailable();
 extern Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags);
 extern Bool GlamoKMSScreenInit(int scrnIndex, ScreenPtr pScreen, int argc,
                                char **argv);
