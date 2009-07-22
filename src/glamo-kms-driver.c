@@ -53,6 +53,7 @@
 
 #include <sys/types.h>
 #include <dirent.h>
+#include <stdint.h>
 
 #include <xorg-server.h>
 #include <drm.h>
@@ -66,6 +67,8 @@
 #include "xf86drm.h"
 
 #include "glamo.h"
+#include "glamo-kms-driver.h"
+#include "glamo-kms-exa.h"
 
 
 static const char *fbSymbols[] = {
@@ -103,37 +106,68 @@ Bool GlamoKernelModesettingAvailable()
 }
 
 
+static Bool CreateFrontBuffer(ScrnInfoPtr pScrn)
+{
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	ScreenPtr pScreen = pScrn->pScreen;
+	PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
+	Bool fbAccessDisabled;
+	int flags;
+
+	pGlamo->noEvict = TRUE;
+	pScreen->ModifyPixmapHeader(rootPixmap,
+	                            pScrn->virtualX, pScrn->virtualY,
+	                            pScrn->depth, pScrn->bitsPerPixel,
+	                            pScrn->displayWidth * pScrn->bitsPerPixel/8,
+	                            NULL);
+	pGlamo->noEvict = FALSE;
+
+	drmModeAddFB(ms->fd,
+	             pScrn->virtualX,
+	             pScrn->virtualY,
+	             pScrn->depth,
+	             pScrn->bitsPerPixel,
+	             pScrn->displayWidth * pScrn->bitsPerPixel / 8,
+	             driGetPixmapHandle(rootPixmap, &flags), &ms->fb_id);
+
+	pScrn->frameX0 = 0;
+	pScrn->frameY0 = 0;
+	GlamoKMSAdjustFrame(pScrn->scrnIndex,
+	                    pScrn->frameX0, pScrn->frameY0,
+	                    0);
+
+	return TRUE;
+}
+
+
 static Bool crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 {
-#if 0
-    modesettingPtr ms = modesettingPTR(pScrn);
-    ScreenPtr pScreen = pScrn->pScreen;
-    PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
-    Bool fbAccessDisabled;
-    CARD8 *fbstart;
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	ScreenPtr pScreen = pScrn->pScreen;
+	PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
+	Bool fbAccessDisabled;
+	CARD8 *fbstart;
 
-    if (width == pScrn->virtualX && height == pScrn->virtualY)
-	return TRUE;
+	if ( (width == pScrn->virtualX) && (height == pScrn->virtualY) )
+		return TRUE;	/* Nothing to do */
 
-    ErrorF("RESIZING TO %dx%d\n", width, height);
+	ErrorF("RESIZING TO %dx%d\n", width, height);
 
-    pScrn->virtualX = width;
-    pScrn->virtualY = height;
+	pScrn->virtualX = width;
+	pScrn->virtualY = height;
 
-    /* HW dependent - FIXME */
-    pScrn->displayWidth = pScrn->virtualX;
+	/* HW dependent - FIXME */
+	pScrn->displayWidth = pScrn->virtualX;
 
-    drmModeRmFB(ms->fd, ms->fb_id);
+	drmModeRmFB(pGlamo->drm_fd, pGlamo->fb_id);
 
-    /* now create new frontbuffer */
-    return CreateFrontBuffer(pScrn);
-#endif
-	return FALSE;
+	/* now create new frontbuffer */
+	return CreateFrontBuffer(pScrn);
 }
 
 
 static const xf86CrtcConfigFuncsRec crtc_config_funcs = {
-    crtc_resize
+	crtc_resize
 };
 
 
@@ -224,33 +258,214 @@ Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags)
 }
 
 
+static Bool GlamoKMSCloseScreen(int scrnIndex, ScreenPtr pScreen)
+{
+	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+	if ( pScrn->vtSema ) {
+		GlamoKMSLeaveVT(scrnIndex, 0);
+	}
+	driCloseScreen(pScreen);
+
+	pScreen->CreateScreenResources = pGlamo->createScreenResources;
+
+	if ( pGlamo->exa ) {
+		ExaClose(pScrn);
+	}
+
+	drmClose(pGlamo->drm_fd);
+	pGlamo->drm_fd = -1;
+
+	pScrn->vtSema = FALSE;
+	pScreen->CloseScreen = pGlamo->CloseScreen;
+	return (*pScreen->CloseScreen)(scrnIndex, pScreen);
+}
+
+
 Bool GlamoKMSScreenInit(int scrnIndex, ScreenPtr pScreen, int argc,
                         char **argv)
 {
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	VisualPtr visual;
+	unsigned long sys_mem;
+	int c;
+	MessageType from;
+
+	/* Deal with server regeneration */
+	if ( pGlamo->drm_fd < 0 ) {
+	pGlamo->drm_fd = drmOpen(NULL, "platform:glamo-fb");
+	if ( pGlamo->drm_fd < 0 ) return FALSE;
+	}
+
+	pScrn->pScreen = pScreen;
+
+	/* HW dependent - FIXME */
+	pScrn->displayWidth = pScrn->virtualX;
+
+	miClearVisualTypes();
+
+	if ( !miSetVisualTypes(pScrn->depth,
+	                      miGetDefaultVisualMask(pScrn->depth),
+	                      pScrn->rgbBits, pScrn->defaultVisual) ) {
+		return FALSE;
+	}
+
+	if ( !miSetPixmapDepths() ) return FALSE;
+
+	pScrn->memPhysBase = 0;
+	pScrn->fbOffset = 0;
+
+	if ( !fbScreenInit(pScreen, NULL,
+	                  pScrn->virtualX, pScrn->virtualY,
+	                  pScrn->xDpi, pScrn->yDpi,
+	                  pScrn->displayWidth, pScrn->bitsPerPixel) ) {
+		return FALSE;
+	}
+
+	if (pScrn->bitsPerPixel > 8) {
+		/* Fixup RGB ordering */
+		visual = pScreen->visuals + pScreen->numVisuals;
+		while (--visual >= pScreen->visuals) {
+			if ((visual->class | DynamicClass) == DirectColor) {
+				visual->offsetRed = pScrn->offset.red;
+				visual->offsetGreen = pScrn->offset.green;
+				visual->offsetBlue = pScrn->offset.blue;
+				visual->redMask = pScrn->mask.red;
+				visual->greenMask = pScrn->mask.green;
+				visual->blueMask = pScrn->mask.blue;
+			}
+		}
+	}
+
+	fbPictureInit(pScreen, NULL, 0);
+
+	pGlamo->createScreenResources = pScreen->CreateScreenResources;
+	pScreen->CreateScreenResources = CreateScreenResources;
+
+	xf86SetBlackWhitePixels(pScreen);
+
+	pGlamo->exa = GlamoKMSExaInit(pScrn);
+
+	miInitializeBackingStore(pScreen);
+	xf86SetBackingStore(pScreen);
+	xf86SetSilkenMouse(pScreen);
+	miDCInitialize(pScreen, xf86GetPointerScreenFuncs());
+
+	/* Need to extend HWcursor support to handle mask interleave */
+	if (!ms->SWCursor) {
+		xf86_cursors_init(pScreen, 64, 64,
+		                  HARDWARE_CURSOR_SOURCE_MASK_INTERLEAVE_64 |
+		                  HARDWARE_CURSOR_ARGB);
+	}
+
+	/* Must force it before EnterVT, so we are in control of VT and
+	 * later memory should be bound when allocating, e.g rotate_mem */
+	pScrn->vtSema = TRUE;
+
+	pScreen->SaveScreen = xf86SaveScreen;
+	pGlamo->CloseScreen = pScreen->CloseScreen;
+	pScreen->CloseScreen = GlamoKMSCloseScreen;
+
+	if ( !xf86CrtcScreenInit(pScreen) ) return FALSE;
+
+	if ( !miCreateDefColormap(pScreen) ) return FALSE;
+
+	xf86DPMSInit(pScreen, xf86DPMSSet, 0);
+
+	if ( serverGeneration == 1 ) {
+		xf86ShowUnusedOptions(pScrn->scrnIndex, pScrn->options);
+	}
+
+	driScreenInit(pScreen);
+
+	return GlamoKMSEnterVT(scrnIndex, 1);
 }
 
 
-Bool GlamoSwitchMode(int scrnIndex, DisplayModePtr mode, int flags)
+Bool GlamoKMSSwitchMode(int scrnIndex, DisplayModePtr mode, int flags)
 {
+	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+	return xf86SetSingleMode(pScrn, mode, RR_Rotate_0);
 }
 
 
-void GlamoAdjustFrame(int scrnIndex, int x, int y, int flags)
+void GlamoKMSAdjustFrame(int scrnIndex, int x, int y, int flags)
 {
+	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
+	xf86OutputPtr output = config->output[config->compat_output];
+	xf86CrtcPtr crtc = output->crtc;
+
+	if (crtc && crtc->enabled) {
+		crtc->funcs->mode_set(crtc,
+		                      pScrn->currentMode,
+		                      pScrn->currentMode,
+		                      x, y);
+		crtc->x = output->initial_x + x;
+		crtc->y = output->initial_y + y;
+	}
 }
 
 
-Bool GlamoEnterVT(int scrnIndex, int flags)
+Bool GlamoKMSEnterVT(int scrnIndex, int flags)
 {
+	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+	driUnlock(pScrn->pScreen);
+
+	/* Only save state once per server generation since that's what most
+	* drivers do.  Could change this to save state at each VT enter. */
+	if ( pGlamo->SaveGeneration != serverGeneration ) {
+		pGlamo->SaveGeneration = serverGeneration;
+		/* ...except there is no hardware state to save */
+	}
+
+	if ( !flags ) {
+		/* signals startup as we'll do this in CreateScreenResources */
+		CreateFrontBuffer(pScrn);
+	}
+
+	if ( !xf86SetDesiredModes(pScrn) ) return FALSE;
+
+	return TRUE;
 }
 
 
-void GlamoLeaveVT(int scrnIndex, int flags)
+void GlamoKMSLeaveVT(int scrnIndex, int flags)
 {
+	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
+	int o;
+
+	for (o = 0; o < config->num_crtc; o++) {
+
+		xf86CrtcPtr crtc = config->crtc[o];
+
+		cursor_destroy(crtc);
+
+		if ( crtc->rotatedPixmap || crtc->rotatedData ) {
+			crtc->funcs->shadow_destroy(crtc, crtc->rotatedPixmap,
+			                            crtc->rotatedData);
+			crtc->rotatedPixmap = NULL;
+			crtc->rotatedData = NULL;
+		}
+
+	}
+
+	drmModeRmFB(pGlamo->drm_fd, pGlamo->fb_id);
+
+	driLock(pScrn->pScreen);
+
+	pScrn->vtSema = FALSE;
 }
 
 
-ModeStatus GlamoValidMode(int scrnIndex, DisplayModePtr mode, Bool verbose,
+ModeStatus GlamoKMSValidMode(int scrnIndex, DisplayModePtr mode, Bool verbose,
                      int flags)
 {
+	return MODE_OK;
 }

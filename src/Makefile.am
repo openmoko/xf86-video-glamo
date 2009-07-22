@@ -38,4 +38,6 @@ glamo_drv_la_SOURCES = \
          glamo-engine.c \
          glamo-kms-driver.c \
          crtc.c \
-         output.c
+         output.c \
+         glamo-dri2.c \
+         glamo-kms-exa.c
