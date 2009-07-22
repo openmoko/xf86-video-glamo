@@ -775,7 +775,7 @@ ExaModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 }
 
 void
-ExaClose(ScrnInfoPtr pScrn)
+GlamoKMSExaClose(ScrnInfoPtr pScrn)
 {
     modesettingPtr ms = modesettingPTR(pScrn);
     struct exa_entity *exa = ms->exa;
@@ -866,7 +866,7 @@ void *GlamoKMSExaInit(ScrnInfoPtr pScrn)
     return (void *)exa;
 
   out_err:
-    ExaClose(pScrn);
+    GlamoKMSExaClose(pScrn);
 
     return NULL;
 }

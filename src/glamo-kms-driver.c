@@ -271,7 +271,7 @@ static Bool GlamoKMSCloseScreen(int scrnIndex, ScreenPtr pScreen)
 	pScreen->CreateScreenResources = pGlamo->createScreenResources;
 
 	if ( pGlamo->exa ) {
-		ExaClose(pScrn);
+		GlamoKMSExaClose(pScrn);
 	}
 
 	drmClose(pGlamo->drm_fd);

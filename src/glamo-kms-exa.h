@@ -23,3 +23,4 @@
 #include "xf86.h"
 
 extern void *GlamoKMSExaInit(ScrnInfoPtr pScrn);
+extern void GlamoKMSExaClose(ScrnInfoPtr pScrn);
