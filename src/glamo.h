@@ -135,8 +135,11 @@ typedef struct {
 /* Use hardware acceleration */
     Bool accel;
 
+    /* Things to do with DRI */
     int drm_fd;
     unsigned int SaveGeneration;
+    unsigned int fb_id;
+    CreateScreenResourcesProcPtr createScreenResources;
 
     uint16_t *colormap;
 } GlamoRec, *GlamoPtr;

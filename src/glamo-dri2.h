@@ -1,5 +1,5 @@
 /*
- * EXA via DRI for the SMedia Glamo3362 X.org Driver
+ * DRI for the SMedia Glamo3362 X.org Driver
  *
  * Copyright 2009 Thomas White <taw@bitwiz.org.uk>
  *
@@ -22,6 +22,7 @@
 
 #include "xf86.h"
 
-extern void *GlamoKMSExaInit(ScrnInfoPtr pScrn);
-extern void GlamoKMSExaClose(ScrnInfoPtr pScrn);
-extern unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags);
+extern void driScreenInit(ScreenPtr pScreen);
+extern void driCloseScreen(ScreenPtr pScreen);
+extern void driLock(ScreenPtr pScreen);
+extern void driUnlock(ScreenPtr pScreen);
