@@ -1,4 +1,11 @@
 /*
+ * DRI for the SMedia Glamo3362 X.org Driver
+ *
+ * Modified: 2009 by Thomas White <taw@bitwiz.org.uk>
+ *
+ * Based on dri2.c from xf86-video-modesetting, to which the following
+ * notice applies:
+ *
  * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
  * All Rights Reserved.
  *
@@ -26,6 +33,7 @@
  * Author: Alan Hourihane <alanh@tungstengraphics.com>
  *
  */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -33,96 +41,87 @@
 #include "xf86.h"
 #include "xf86_OSproc.h"
 
-#include "driver.h"
+#include "glamo.h"
+#include "glamo-dri2.h"
 
-#include "dri2.h"
+extern unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags);
 
-extern unsigned int
-driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags);
-
-void
-driLock(ScreenPtr pScreen)
+void driLock(ScreenPtr pScreen)
 {
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    GlamoPtr pGlamo = GlamoPTR(pScrn);
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
 
-    if (!pGlamo->lock_held)
-	DRM_LOCK(pGlamo->drm_fd, pGlamo->lock, pGlamo->context, 0);
+	if (!pGlamo->lock_held)
+		DRM_LOCK(pGlamo->drm_fd, pGlamo->lock, pGlamo->context, 0);
 
-    pGlamo->lock_held = 1;
+	pGlamo->lock_held = 1;
 }
 
-void
-driUnlock(ScreenPtr pScreen)
+void driUnlock(ScreenPtr pScreen)
 {
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    GlamoPtr pGlamo = GlamoPTR(pScrn);
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
 
-    if (pGlamo->lock_held)
-	DRM_UNLOCK(pGlamo->drm_fd, pGlamo->lock, pGlamo->context);
+	if (pGlamo->lock_held)
+		DRM_UNLOCK(pGlamo->drm_fd, pGlamo->lock, pGlamo->context);
 
-    pGlamo->lock_held = 0;
+	pGlamo->lock_held = 0;
 }
 
-static void
-driBeginClipNotify(ScreenPtr pScreen)
+static void driBeginClipNotify(ScreenPtr pScreen)
 {
-    driLock(pScreen);
+	driLock(pScreen);
 }
 
-static void
-driEndClipNotify(ScreenPtr pScreen)
+static void driEndClipNotify(ScreenPtr pScreen)
 {
-    driUnlock(pScreen);
+	driUnlock(pScreen);
 }
 
 struct __DRILock
 {
-    unsigned int block_header;
-    drm_hw_lock_t lock;
-    unsigned int next_id;
+	unsigned int block_header;
+	drm_hw_lock_t lock;
+	unsigned int next_id;
 };
 
 #define DRI2_SAREA_BLOCK_HEADER(type, size) (((type) << 16) | (size))
 #define DRI2_SAREA_BLOCK_LOCK		0x0001
 
-void
-driScreenInit(ScreenPtr pScreen)
+void driScreenInit(ScreenPtr pScreen)
 {
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    GlamoPtr pGlamo = GlamoPTR(pScrn);
-    DRI2InfoRec dri2info;
-    const char *driverName;
-    unsigned int sarea_handle;
-    struct __DRILock *DRILock;
-    void *p;
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	DRI2InfoRec dri2info;
+	const char *driverName;
+	unsigned int sarea_handle;
+	struct __DRILock *DRILock;
+	void *p;
 
-    dri2info.version = 1;
-    dri2info.fd = pGlamo->drm_fd;
-    dri2info.driverSareaSize = sizeof(struct __DRILock);
-    dri2info.driverName = "i915";      /* FIXME */
-    dri2info.getPixmapHandle = driGetPixmapHandle;
-    dri2info.beginClipNotify = driBeginClipNotify;
-    dri2info.endClipNotify = driEndClipNotify;
+	dri2info.version = 1;
+	dri2info.fd = pGlamo->drm_fd;
+	dri2info.driverSareaSize = sizeof(struct __DRILock);
+	dri2info.driverName = "i915";      /* FIXME */
+	dri2info.getPixmapHandle = driGetPixmapHandle;
+	dri2info.beginClipNotify = driBeginClipNotify;
+	dri2info.endClipNotify = driEndClipNotify;
 
-    p = DRI2ScreenInit(pScreen, &dri2info);
-    if (!p)
-	return;
+	p = DRI2ScreenInit(pScreen, &dri2info);
+	if (!p) return;
 
-    DRILock = p;
-    DRILock->block_header =
+	DRILock = p;
+	DRILock->block_header =
 	DRI2_SAREA_BLOCK_HEADER(DRI2_SAREA_BLOCK_LOCK, sizeof *DRILock);
-    pGlamo->lock = &DRILock->lock;
-    pGlamo->context = 1;
-    DRILock->next_id = 2;
-    driLock(pScreen);
+	pGlamo->lock = &DRILock->lock;
+	pGlamo->context = 1;
+	DRILock->next_id = 2;
+	driLock(pScreen);
 
-    DRI2Connect(pScreen, &pGlamo->drm_fd, &driverName, &sarea_handle);
+	DRI2Connect(pScreen, &pGlamo->drm_fd, &driverName, &sarea_handle);
 }
 
-void
-driCloseScreen(ScreenPtr pScreen)
+void driCloseScreen(ScreenPtr pScreen)
 {
-    driUnlock(pScreen);
-    DRI2CloseScreen(pScreen);
+	driUnlock(pScreen);
+	DRI2CloseScreen(pScreen);
 }
