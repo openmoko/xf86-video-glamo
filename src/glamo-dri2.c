@@ -34,91 +34,150 @@
  *
  */
 
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include "xf86.h"
-#include "xf86_OSproc.h"
+#include <xf86.h>
+#include <xf86_OSproc.h>
+#include <xf86drm.h>
+#include <dri2.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "glamo.h"
 #include "glamo-dri2.h"
+#include "glamo-kms-exa.h"
 
-extern unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags);
 
-void driLock(ScreenPtr pScreen)
+typedef struct {
+	PixmapPtr pPixmap;
+} GlamoDRI2BufferPrivateRec, *GlamoDRI2BufferPrivatePtr;
+
+
+static DRI2BufferPtr glamoCreateBuffers(DrawablePtr pDraw,
+					unsigned int *attachments, int count)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	ScreenPtr pScreen = pDraw->pScreen;
+	DRI2BufferPtr buffers;
+	int i;
+	GlamoDRI2BufferPrivatePtr privates;
+	PixmapPtr pPixmap, pDepthPixmap;
 
-	if (!pGlamo->lock_held)
-		DRM_LOCK(pGlamo->drm_fd, pGlamo->lock, pGlamo->context, 0);
+	buffers = xcalloc(count, sizeof *buffers);
+	if ( buffers == NULL ) return NULL;
+	privates = xcalloc(count, sizeof *privates);
+	if ( privates == NULL ) {
+		xfree(buffers);
+		return NULL;
+	}
 
-	pGlamo->lock_held = 1;
+	pDepthPixmap = NULL;
+	/* For each attachment */
+	for ( i=0; i<count; i++ ) {
+
+		if ( attachments[i] == DRI2BufferFrontLeft ) {
+
+			/* Front left buffer - just dig out the pixmap */
+			if ( pDraw->type == DRAWABLE_PIXMAP ) {
+				pPixmap = (PixmapPtr)pDraw;
+			} else {
+				pPixmap = (*pScreen->GetWindowPixmap)(
+							(WindowPtr)pDraw);
+			}
+			pPixmap->refcnt++;
+
+		} else {
+
+			/* Anything else - create a new pixmap */
+			pPixmap = (*pScreen->CreatePixmap)(pScreen,
+							  pDraw->width,
+							  pDraw->height,
+							  pDraw->depth,
+							  0);
+
+		}
+
+		if ( attachments[i] == DRI2BufferDepth ) pDepthPixmap = pPixmap;
+
+		/* Set up the return data structure */
+		buffers[i].attachment = attachments[i];
+		buffers[i].pitch = pPixmap->devKind;
+		buffers[i].cpp = pPixmap->drawable.bitsPerPixel / 8;
+		buffers[i].driverPrivate = &privates[i];
+		buffers[i].flags = 0;
+		privates[i].pPixmap = pPixmap;
+
+	}
+
+	return buffers;
 }
 
-void driUnlock(ScreenPtr pScreen)
+
+static void glamoDestroyBuffers(DrawablePtr pDraw,
+				DRI2BufferPtr buffers, int count)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	ScreenPtr pScreen = pDraw->pScreen;
+	int i;
 
-	if (pGlamo->lock_held)
-		DRM_UNLOCK(pGlamo->drm_fd, pGlamo->lock, pGlamo->context);
+	for ( i=0; i<count; i++ ) {
+		GlamoDRI2BufferPrivatePtr private;
+		private = buffers[i].driverPrivate;
+		(*pScreen->DestroyPixmap)(private->pPixmap);
+	}
 
-	pGlamo->lock_held = 0;
+	if ( buffers ) {
+		xfree(buffers[0].driverPrivate);
+		xfree(buffers);
+	}
 }
 
-static void driBeginClipNotify(ScreenPtr pScreen)
+
+static void glamoCopyRegion(DrawablePtr pDraw, RegionPtr pRegion,
+		   	    DRI2BufferPtr pDestBuffer, DRI2BufferPtr pSrcBuffer)
 {
-	driLock(pScreen);
 }
 
-static void driEndClipNotify(ScreenPtr pScreen)
-{
-	driUnlock(pScreen);
-}
-
-struct __DRILock
-{
-	unsigned int block_header;
-	drm_hw_lock_t lock;
-	unsigned int next_id;
-};
-
-#define DRI2_SAREA_BLOCK_HEADER(type, size) (((type) << 16) | (size))
-#define DRI2_SAREA_BLOCK_LOCK		0x0001
 
 void driScreenInit(ScreenPtr pScreen)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	DRI2InfoRec dri2info;
-	const char *driverName;
-	unsigned int sarea_handle;
-	struct __DRILock *DRILock;
-	void *p;
+	char *p;
+	struct stat sbuf;
+	dev_t d;
+	int i;
+
+	fstat(pGlamo->drm_fd, &sbuf);
+	d = sbuf.st_rdev;
+	p = pGlamo->drm_devname;
+	for ( i=0; i<DRM_MAX_MINOR; i++ ) {
+		sprintf(p, DRM_DEV_NAME, DRM_DIR_NAME, i);
+		if ( stat(p, &sbuf) == 0 && sbuf.st_rdev == d ) break;
+	}
+	if ( i == DRM_MAX_MINOR ) {
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+			   "[glamo-dri] Failed to find name of DRM device\n");
+		return;
+	}
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		   "[glamo-dri] Name of DRM device is '%s'\n", p);
 
 	dri2info.version = 1;
 	dri2info.fd = pGlamo->drm_fd;
-	dri2info.driverSareaSize = sizeof(struct __DRILock);
-	dri2info.driverName = "i915";      /* FIXME */
-	dri2info.getPixmapHandle = driGetPixmapHandle;
-	dri2info.beginClipNotify = driBeginClipNotify;
-	dri2info.endClipNotify = driEndClipNotify;
+	dri2info.deviceName = p;
+	dri2info.driverName = "glamo";
 
-	p = DRI2ScreenInit(pScreen, &dri2info);
-	if (!p) return;
+	dri2info.CreateBuffers = glamoCreateBuffers;
+	dri2info.DestroyBuffers = glamoDestroyBuffers;
+	dri2info.CopyRegion = glamoCopyRegion;
 
-	DRILock = p;
-	DRILock->block_header =
-	DRI2_SAREA_BLOCK_HEADER(DRI2_SAREA_BLOCK_LOCK, sizeof *DRILock);
-	pGlamo->lock = &DRILock->lock;
-	pGlamo->context = 1;
-	DRILock->next_id = 2;
-	driLock(pScreen);
-
-	DRI2Connect(pScreen, &pGlamo->drm_fd, &driverName, &sarea_handle);
+	if ( !DRI2ScreenInit(pScreen, &dri2info) ) return;
 }
+
 
 void driCloseScreen(ScreenPtr pScreen)
 {

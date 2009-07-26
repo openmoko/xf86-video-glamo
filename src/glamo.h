@@ -37,6 +37,7 @@
 #include "xf86.h"
 #include "exa.h"
 #include <linux/fb.h>
+#include <drm/drm.h>
 
 #define GLAMO_REG_BASE(c)		((c)->attr.address[0])
 #define GLAMO_REG_SIZE(c)		(0x2400)
@@ -140,6 +141,7 @@ typedef struct {
     unsigned int SaveGeneration;
     unsigned int fb_id;
     CreateScreenResourcesProcPtr createScreenResources;
+    char drm_devname[64];
 
     uint16_t *colormap;
 } GlamoRec, *GlamoPtr;

@@ -71,6 +71,7 @@
 #include "glamo-kms-driver.h"
 #include "glamo-kms-exa.h"
 #include "glamo-dri2.h"
+#include "glamo-kms-crtc.h"
 
 
 static const char *fbSymbols[] = {

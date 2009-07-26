@@ -1,4 +1,11 @@
 /*
+ * KMS Support for the SMedia Glamo3362 X.org Driver
+ *
+ * Modified: 2009 by Thomas White <taw@bitwiz.org.uk>
+ *
+ * Based on crtc.c from xf86-video-modesetting, to which the following
+ * notice applies:
+ *
  * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
  * All Rights Reserved.
  *
@@ -27,6 +34,7 @@
  *
  */
 
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -37,271 +45,200 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdint.h>
+#include <errno.h>
 
 #include <xf86.h>
 #include <xf86i2c.h>
 #include <xf86Crtc.h>
-#include "driver.h"
-#include "xf86Modes.h"
-
+#include <xf86drm.h>
+#include <drm.h>
+#include <xf86drmMode.h>
+#include <xf86Modes.h>
 #define DPMS_SERVER
 #include <X11/extensions/dpms.h>
 
+#include "glamo.h"
+
+
 struct crtc_private
 {
-    drmModeCrtcPtr drm_crtc;
-
-    /* hwcursor */
-    drmBO cursor_bo;
+	drmModeCrtcPtr drm_crtc;
 };
 
-static void
-crtc_dpms(xf86CrtcPtr crtc, int mode)
-{
-    ScrnInfoPtr pScrn = crtc->scrn;
 
-    switch (mode) {
-    case DPMSModeOn:
-    case DPMSModeStandby:
-    case DPMSModeSuspend:
-	break;
-    case DPMSModeOff:
-	break;
-    }
+static void crtc_dpms(xf86CrtcPtr crtc, int mode)
+{
+	switch (mode) {
+	case DPMSModeOn:
+	case DPMSModeStandby:
+	case DPMSModeSuspend:
+		break;
+	case DPMSModeOff:
+		break;
+	}
 }
 
-static Bool
-crtc_lock(xf86CrtcPtr crtc)
+
+static Bool crtc_lock(xf86CrtcPtr crtc)
 {
-    return FALSE;
+	return FALSE;
 }
 
-static void
-crtc_unlock(xf86CrtcPtr crtc)
+
+static void crtc_unlock(xf86CrtcPtr crtc)
 {
 }
 
-static void
-crtc_prepare(xf86CrtcPtr crtc)
+
+static void crtc_prepare(xf86CrtcPtr crtc)
 {
 }
 
-static void
-crtc_commit(xf86CrtcPtr crtc)
+
+static void crtc_commit(xf86CrtcPtr crtc)
 {
 }
 
-static Bool
-crtc_mode_fixup(xf86CrtcPtr crtc, DisplayModePtr mode,
-		DisplayModePtr adjusted_mode)
+
+static Bool crtc_mode_fixup(xf86CrtcPtr crtc, DisplayModePtr mode,
+                            DisplayModePtr adjusted_mode)
 {
-    return TRUE;
+	return TRUE;
 }
 
-static void
-crtc_mode_set(xf86CrtcPtr crtc, DisplayModePtr mode,
-	      DisplayModePtr adjusted_mode, int x, int y)
+
+static void crtc_mode_set(xf86CrtcPtr crtc, DisplayModePtr mode,
+                          DisplayModePtr adjusted_mode, int x, int y)
 {
-    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
-    modesettingPtr ms = modesettingPTR(crtc->scrn);
-    xf86OutputPtr output = config->output[config->compat_output];
-    drmModeConnectorPtr drm_connector = output->driver_private;
-    struct crtc_private *crtcp = crtc->driver_private;
-    drmModeCrtcPtr drm_crtc = crtcp->drm_crtc;
-    struct drm_mode_modeinfo drm_mode;
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
+	GlamoPtr pGlamo = GlamoPTR(crtc->scrn);
+	xf86OutputPtr output = config->output[config->compat_output];
+	drmModeConnectorPtr drm_connector = output->driver_private;
+	struct crtc_private *crtcp = crtc->driver_private;
+	drmModeCrtcPtr drm_crtc = crtcp->drm_crtc;
+	drmModeModeInfo drm_mode;
 
-    drm_mode.clock = mode->Clock;
-    drm_mode.hdisplay = mode->HDisplay;
-    drm_mode.hsync_start = mode->HSyncStart;
-    drm_mode.hsync_end = mode->HSyncEnd;
-    drm_mode.htotal = mode->HTotal;
-    drm_mode.vdisplay = mode->VDisplay;
-    drm_mode.vsync_start = mode->VSyncStart;
-    drm_mode.vsync_end = mode->VSyncEnd;
-    drm_mode.vtotal = mode->VTotal;
-    drm_mode.flags = mode->Flags;
-    drm_mode.hskew = mode->HSkew;
-    drm_mode.vscan = mode->VScan;
-    drm_mode.vrefresh = mode->VRefresh;
-    if (!mode->name)
-	xf86SetModeDefaultName(mode);
-    strncpy(drm_mode.name, mode->name, DRM_DISPLAY_MODE_LEN);
+	drm_mode.clock = mode->Clock;
+	drm_mode.hdisplay = mode->HDisplay;
+	drm_mode.hsync_start = mode->HSyncStart;
+	drm_mode.hsync_end = mode->HSyncEnd;
+	drm_mode.htotal = mode->HTotal;
+	drm_mode.vdisplay = mode->VDisplay;
+	drm_mode.vsync_start = mode->VSyncStart;
+	drm_mode.vsync_end = mode->VSyncEnd;
+	drm_mode.vtotal = mode->VTotal;
+	drm_mode.flags = mode->Flags;
+	drm_mode.hskew = mode->HSkew;
+	drm_mode.vscan = mode->VScan;
+	drm_mode.vrefresh = mode->VRefresh;
+	if ( !mode->name )
+		xf86SetModeDefaultName(mode);
+	strncpy(drm_mode.name, mode->name, DRM_DISPLAY_MODE_LEN);
 
-    drmModeSetCrtc(ms->fd, drm_crtc->crtc_id, ms->fb_id, x, y,
-		   &drm_connector->connector_id, 1, &drm_mode);
+	drmModeSetCrtc(pGlamo->drm_fd, drm_crtc->crtc_id, pGlamo->fb_id, x, y,
+	               &drm_connector->connector_id, 1, &drm_mode);
 }
 
-void
-crtc_load_lut(xf86CrtcPtr crtc)
-{
-    ScrnInfoPtr pScrn = crtc->scrn;
-}
 
-static void
-crtc_gamma_set(xf86CrtcPtr crtc, CARD16 * red, CARD16 * green, CARD16 * blue,
-	       int size)
+void crtc_load_lut(xf86CrtcPtr crtc)
 {
 }
 
-static void *
-crtc_shadow_allocate(xf86CrtcPtr crtc, int width, int height)
-{
-    ScrnInfoPtr pScrn = crtc->scrn;
 
-    return NULL;
+static void crtc_gamma_set(xf86CrtcPtr crtc,
+                           CARD16 *red, CARD16 *green, CARD16 *blue,
+                           int size)
+{
 }
 
-static PixmapPtr
-crtc_shadow_create(xf86CrtcPtr crtc, void *data, int width, int height)
-{
-    ScrnInfoPtr pScrn = crtc->scrn;
 
-    return NULL;
+static void *crtc_shadow_allocate(xf86CrtcPtr crtc, int width, int height)
+{
+	return NULL;
 }
 
-static void
-crtc_shadow_destroy(xf86CrtcPtr crtc, PixmapPtr rotate_pixmap, void *data)
+
+static PixmapPtr crtc_shadow_create(xf86CrtcPtr crtc, void *data,
+                                    int width, int height)
 {
-    ScrnInfoPtr pScrn = crtc->scrn;
+	return NULL;
 }
 
-static void
-crtc_destroy(xf86CrtcPtr crtc)
+
+static void crtc_shadow_destroy(xf86CrtcPtr crtc, PixmapPtr rotate_pixmap,
+                                void *data)
 {
-    modesettingPtr ms = modesettingPTR(crtc->scrn);
-    struct crtc_private *crtcp = crtc->driver_private;
-
-    if (crtcp->cursor_bo.handle)
-	drmBOUnreference(ms->fd, &crtcp->cursor_bo);
-
-    drmModeFreeCrtc(crtcp->drm_crtc);
-    xfree(crtcp);
 }
 
-static void
-crtc_load_cursor_argb(xf86CrtcPtr crtc, CARD32 * image)
+
+static void crtc_destroy(xf86CrtcPtr crtc)
 {
-    unsigned char *ptr;
-    modesettingPtr ms = modesettingPTR(crtc->scrn);
-    struct crtc_private *crtcp = crtc->driver_private;
+	struct crtc_private *crtcp = crtc->driver_private;
 
-    if (!crtcp->cursor_bo.handle)
-	drmBOCreate(ms->fd, 64 * 64 * 4, 0, NULL,
-		    DRM_BO_FLAG_READ | DRM_BO_FLAG_WRITE
-		    | DRM_BO_FLAG_NO_EVICT | DRM_BO_FLAG_MAPPABLE |
-		    DRM_BO_FLAG_MEM_VRAM,
-		    DRM_BO_HINT_DONT_FENCE, &crtcp->cursor_bo);
-
-    drmBOMap(ms->fd, &crtcp->cursor_bo, DRM_BO_FLAG_WRITE,
-	     DRM_BO_HINT_DONT_FENCE, (void **)&ptr);
-
-    if (ptr)
-	memcpy(ptr, image, 64 * 64 * 4);
-
-    drmBOUnmap(ms->fd, &crtcp->cursor_bo);
+	drmModeFreeCrtc(crtcp->drm_crtc);
+	xfree(crtcp);
 }
 
-static void
-crtc_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
-{
-    modesettingPtr ms = modesettingPTR(crtc->scrn);
-    struct crtc_private *crtcp = crtc->driver_private;
-
-    drmModeMoveCursor(ms->fd, crtcp->drm_crtc->crtc_id, x, y);
-}
-
-static void
-crtc_show_cursor(xf86CrtcPtr crtc)
-{
-    modesettingPtr ms = modesettingPTR(crtc->scrn);
-    struct crtc_private *crtcp = crtc->driver_private;
-
-    if (crtcp->cursor_bo.handle)
-	drmModeSetCursor(ms->fd, crtcp->drm_crtc->crtc_id,
-			 crtcp->cursor_bo.handle, 64, 64);
-}
-
-static void
-crtc_hide_cursor(xf86CrtcPtr crtc)
-{
-    modesettingPtr ms = modesettingPTR(crtc->scrn);
-    struct crtc_private *crtcp = crtc->driver_private;
-
-    drmModeSetCursor(ms->fd, crtcp->drm_crtc->crtc_id, 0, 0, 0);
-}
 
 static const xf86CrtcFuncsRec crtc_funcs = {
-    .dpms = crtc_dpms,
-    .save = NULL,
-    .restore = NULL,
-    .lock = crtc_lock,
-    .unlock = crtc_unlock,
-    .mode_fixup = crtc_mode_fixup,
-    .prepare = crtc_prepare,
-    .mode_set = crtc_mode_set,
-    .commit = crtc_commit,
-    .gamma_set = crtc_gamma_set,
-    .shadow_create = crtc_shadow_create,
-    .shadow_allocate = crtc_shadow_allocate,
-    .shadow_destroy = crtc_shadow_destroy,
-    .set_cursor_position = crtc_set_cursor_position,
-    .show_cursor = crtc_show_cursor,
-    .hide_cursor = crtc_hide_cursor,
-    .load_cursor_image = NULL,	       /* lets convert to argb only */
-    .set_cursor_colors = NULL,	       /* using argb only */
-    .load_cursor_argb = crtc_load_cursor_argb,
-    .destroy = crtc_destroy,
+	.dpms = crtc_dpms,
+	.save = NULL,
+	.restore = NULL,
+	.lock = crtc_lock,
+	.unlock = crtc_unlock,
+	.mode_fixup = crtc_mode_fixup,
+	.prepare = crtc_prepare,
+	.mode_set = crtc_mode_set,
+	.commit = crtc_commit,
+	.gamma_set = crtc_gamma_set,
+	.shadow_create = crtc_shadow_create,
+	.shadow_allocate = crtc_shadow_allocate,
+	.shadow_destroy = crtc_shadow_destroy,
+	.set_cursor_position = NULL,
+	.show_cursor = NULL,
+	.hide_cursor = NULL,
+	.load_cursor_image = NULL,	       /* lets convert to argb only */
+	.set_cursor_colors = NULL,	       /* using argb only */
+	.load_cursor_argb = NULL,
+	.destroy = crtc_destroy,
 };
 
-void
-cursor_destroy(xf86CrtcPtr crtc)
+
+void crtc_init(ScrnInfoPtr pScrn)
 {
-    modesettingPtr ms = modesettingPTR(crtc->scrn);
-    struct crtc_private *crtcp = crtc->driver_private;
+	xf86CrtcPtr crtc;
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	drmModeResPtr res;
+	drmModeCrtcPtr drm_crtc = NULL;
+	struct crtc_private *crtcp;
+	int c;
 
-    if (crtcp->cursor_bo.handle) {
-	drmBOSetStatus(ms->fd, &crtcp->cursor_bo, 0, 0, 0, 0, 0);
-	drmBOUnreference(ms->fd, &crtcp->cursor_bo);
-    }
-}
-
-void
-crtc_init(ScrnInfoPtr pScrn)
-{
-    modesettingPtr ms = modesettingPTR(pScrn);
-    xf86CrtcPtr crtc;
-    drmModeResPtr res;
-    drmModeCrtcPtr drm_crtc = NULL;
-    struct crtc_private *crtcp;
-    int c, k, p;
-
-    res = drmModeGetResources(ms->fd);
-    if (res == 0) {
-	ErrorF("Failed drmModeGetResources %d\n", errno);
-	return;
-    }
-
-    for (c = 0; c < res->count_crtcs; c++) {
-	drm_crtc = drmModeGetCrtc(ms->fd, res->crtcs[c]);
-	if (!drm_crtc)
-	    continue;
-
-	crtc = xf86CrtcCreate(pScrn, &crtc_funcs);
-	if (crtc == NULL)
-	    goto out;
-
-	crtcp = xcalloc(1, sizeof(struct crtc_private));
-	if (!crtcp) {
-	    xf86CrtcDestroy(crtc);
-	    goto out;
+	res = drmModeGetResources(pGlamo->drm_fd);
+	if (res == 0) {
+		ErrorF("Failed drmModeGetResources %d\n", errno);
+		return;
 	}
 
-	crtcp->drm_crtc = drm_crtc;
+	for (c = 0; c < res->count_crtcs; c++) {
+		drm_crtc = drmModeGetCrtc(pGlamo->drm_fd, res->crtcs[c]);
+		if (!drm_crtc)
+		    continue;
 
-	crtc->driver_private = crtcp;
+		crtc = xf86CrtcCreate(pScrn, &crtc_funcs);
+		if (crtc == NULL)
+		    goto out;
 
-    }
+		crtcp = xcalloc(1, sizeof(struct crtc_private));
+		if (!crtcp) {
+		    xf86CrtcDestroy(crtc);
+		    goto out;
+		}
 
-  out:
-    drmModeFreeResources(res);
+		crtcp->drm_crtc = drm_crtc;
+
+		crtc->driver_private = crtcp;
+	}
+
+out:
+	drmModeFreeResources(res);
 }
