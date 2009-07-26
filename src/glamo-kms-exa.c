@@ -332,50 +332,14 @@ void GlamoKMSExaDoneComposite(PixmapPtr pDst)
 Bool GlamoKMSExaUploadToScreen(PixmapPtr pDst, int x, int y, int w, int h,
                                char *src, int src_pitch)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	int bpp, i;
-	CARD8 *dst_offset;
-	int dst_pitch;
-
-	bpp = pDst->drawable.bitsPerPixel / 8;
-	dst_pitch = pDst->devKind;
-	dst_offset = pGlamo->exa->memoryBase + exaGetPixmapOffset(pDst)
-						+ x*bpp + y*dst_pitch;
-
-	for (i = 0; i < h; i++) {
-		memcpy(dst_offset, src, w*bpp);
-		dst_offset += dst_pitch;
-		src += src_pitch;
-	}
-
-	return TRUE;
+	return FALSE;
 }
 
 
 Bool GlamoKMSExaDownloadFromScreen(PixmapPtr pSrc, int x, int y, int w, int h,
                                    char *dst, int dst_pitch)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	int bpp, i;
-	CARD8 *dst_offset, *src;
-	int src_pitch;
-
-	bpp = pSrc->drawable.bitsPerPixel;
-	bpp /= 8;
-	src_pitch = pSrc->devKind;
-	src = pGlamo->exa->memoryBase + exaGetPixmapOffset(pSrc) +
-						x*bpp + y*src_pitch;
-	dst_offset = (unsigned char*)dst;
-
-	for (i = 0; i < h; i++) {
-		memcpy(dst_offset, src, w*bpp);
-		dst_offset += dst_pitch;
-		src += src_pitch;
-	}
-
-	return TRUE;
+	return FALSE;
 }
 
 
@@ -579,6 +543,7 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 
 	exa->DownloadFromScreen = GlamoKMSExaDownloadFromScreen;
 	exa->UploadToScreen = GlamoKMSExaUploadToScreen;
+	exa->UploadToScratch = NULL;
 
 //	exa->MarkSync = GlamoKMSExaMarkSync;
 	exa->WaitMarker = GlamoKMSExaWaitMarker;
