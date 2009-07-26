@@ -174,6 +174,7 @@ void driScreenInit(ScreenPtr pScreen)
 	dri2info.CreateBuffers = glamoCreateBuffers;
 	dri2info.DestroyBuffers = glamoDestroyBuffers;
 	dri2info.CopyRegion = glamoCopyRegion;
+	dri2info.Wait = NULL;
 
 	if ( !DRI2ScreenInit(pScreen, &dri2info) ) return;
 }

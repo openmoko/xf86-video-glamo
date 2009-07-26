@@ -38,6 +38,7 @@
 #include "exa.h"
 #include <linux/fb.h>
 #include <drm/drm.h>
+#include <drm/glamo_bo.h>
 
 #define GLAMO_REG_BASE(c)		((c)->attr.address[0])
 #define GLAMO_REG_SIZE(c)		(0x2400)
@@ -105,6 +106,9 @@ typedef struct {
 	 * "at once", when we are happy with it.
 	 */
 	MemBuf *cmd_queue;
+	int cmdq_obj_used;
+	char *cmdq_objs;
+	char *cmdq_obj_pos;
 
 	/* What was GLAMOCardInfo */
 	volatile char *reg_base;
@@ -140,8 +144,8 @@ typedef struct {
     int drm_fd;
     unsigned int SaveGeneration;
     unsigned int fb_id;
-    CreateScreenResourcesProcPtr createScreenResources;
     char drm_devname[64];
+    struct glamo_bo_manager *bufmgr;
 
     uint16_t *colormap;
 } GlamoRec, *GlamoPtr;

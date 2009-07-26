@@ -279,7 +279,7 @@ static Bool GlamoKMSCloseScreen(int scrnIndex, ScreenPtr pScreen)
 	}
 	driCloseScreen(pScreen);
 
-	pScreen->CreateScreenResources = pGlamo->createScreenResources;
+	pScreen->CreateScreenResources = pGlamo->CreateScreenResources;
 
 	if ( pGlamo->exa ) {
 		GlamoKMSExaClose(pScrn);
@@ -302,7 +302,7 @@ static Bool GlamoKMSCreateScreenResources(ScreenPtr pScreen)
 	Bool ret;
 	unsigned int flags;
 
-	pScreen->CreateScreenResources = pGlamo->createScreenResources;
+	pScreen->CreateScreenResources = pGlamo->CreateScreenResources;
 	ret = pScreen->CreateScreenResources(pScreen);
 	pScreen->CreateScreenResources = GlamoKMSCreateScreenResources;
 
@@ -382,12 +382,12 @@ Bool GlamoKMSScreenInit(int scrnIndex, ScreenPtr pScreen, int argc,
 
 	fbPictureInit(pScreen, NULL, 0);
 
-	pGlamo->createScreenResources = pScreen->CreateScreenResources;
+	pGlamo->CreateScreenResources = pScreen->CreateScreenResources;
 	pScreen->CreateScreenResources = GlamoKMSCreateScreenResources;
 
 	xf86SetBlackWhitePixels(pScreen);
 
-	pGlamo->exa = GlamoKMSExaInit(pScrn);
+	GlamoKMSExaInit(pScrn);
 
 	miInitializeBackingStore(pScreen);
 	xf86SetBackingStore(pScreen);

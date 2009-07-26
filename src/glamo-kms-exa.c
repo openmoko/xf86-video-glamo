@@ -19,854 +19,598 @@
  * MA 02111-1307 USA
  *
  *
- * The KMS parts of this driver are based on xf86-video-modesetting, to
- * which the following notice applies:
+ * The contents of this file are based on glamo-draw.c, to which the following
+ * notice applies:
  *
- * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
- * All Rights Reserved.
+ * Copyright  2007 OpenMoko, Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
+ * This driver is based on Xati,
+ * Copyright  2003 Eric Anholt
  *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
+ * Permission to use, copy, modify, distribute, and sell this software and its
+ * documentation for any purpose is hereby granted without fee, provided that
+ * the above copyright notice appear in all copies and that both that copyright
+ * notice and this permission notice appear in supporting documentation, and
+ * that the name of the copyright holders not be used in advertising or
+ * publicity pertaining to distribution of the software without specific,
+ * written prior permission.  The copyright holders make no representations
+ * about the suitability of this software for any purpose.  It is provided "as
+ * is" without express or implied warranty.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- *
- * Author: Alan Hourihane <alanh@tungstengraphics.com>
- *
+ * THE COPYRIGHT HOLDERS DISCLAIM ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO
+ * EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+ * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+ * DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+ * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+ * OF THIS SOFTWARE.
  */
+
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 
-/* FIXME ! */
-#define DRI_DRIVER_PATH "/ISO/X.Org/modular/i386/lib/dri"
+#include "glamo-log.h"
+#include "glamo.h"
+#include "glamo-regs.h"
+#include "glamo-drm-cmdq.h"
 
-#include "xf86.h"
-#include "xf86_OSproc.h"
-#include "driver.h"
-#include <dlfcn.h>
+#include <drm/glamo_drm.h>
+#include <drm/glamo_bo.h>
+#include <xf86drm.h>
 
-#include "pipe/p_winsys.h"
-#include "pipe/p_format.h"
-#include "pipe/p_context.h"
-#include "pipe/p_util.h"
-#include "pipe/p_state.h"
-#include "pipe/p_inlines.h"
 
-/* EXA winsys */
-struct exa_context
-{
-};
-
-struct exa_winsys
-{
-    struct pipe_winsys base;
-    modesettingPtr ms;
-};
-
-struct exa_buffer
-{
-    struct pipe_buffer base;
-    drmBO bo;
-    boolean userBuffer;	/** Is this a user-space buffer? */
-    //void *data;
-    //void *mapped;
-};
-
-struct exa_surface
-{
-    struct pipe_surface surface;
-};
-
-struct exa_entity
-{
-    ExaDriverPtr pExa;
-    struct exa_context *c;
-    struct pipe_winsys *ws;
-    struct pipe_context *ctx;
-    struct pipe_screen *scrn;
-};
-
-static INLINE struct exa_winsys *
-exa_get_winsys(struct pipe_winsys *ws)
-{
-    return (struct exa_winsys *)ws;
-}
-
-static INLINE struct exa_surface *
-exa_get_surface(struct pipe_surface *ps)
-{
-    return (struct exa_surface *)ps;
-}
-
-static INLINE struct exa_buffer *
-exa_get_buffer(struct pipe_buffer *buf)
-{
-    return (struct exa_buffer *)buf;
-}
-
-static void *
-exa_buffer_map(struct pipe_winsys *pws, struct pipe_buffer *buf,
-	       unsigned flags)
-{
-    struct exa_buffer *exa_buf = exa_get_buffer(buf);
-    struct exa_winsys *exa_winsys = exa_get_winsys(pws);
-    void *virtual;
-
-    drmBOMap(exa_winsys->ms->fd,
-	     &exa_buf->bo, DRM_BO_FLAG_READ | DRM_BO_FLAG_WRITE, 0, &virtual);
-
-    return virtual;
-}
-
-static void
-exa_buffer_unmap(struct pipe_winsys *pws, struct pipe_buffer *buf)
-{
-    struct exa_buffer *exa_buf = exa_get_buffer(buf);
-    struct exa_winsys *exa_winsys = exa_get_winsys(pws);
-
-    drmBOUnmap(exa_winsys->ms->fd, &exa_buf->bo);
-}
-
-static void
-exa_buffer_destroy(struct pipe_winsys *pws, struct pipe_buffer *buf)
-{
-    struct exa_winsys *exa_winsys = exa_get_winsys(pws);
-    struct exa_buffer *exa_buf = exa_get_buffer(buf);
-
-    drmBOUnreference(exa_winsys->ms->fd, &exa_buf->bo);
-
-    free(exa_buf);
-}
-
-static void
-exa_flush_frontbuffer(struct pipe_winsys *pws,
-		      struct pipe_surface *surf, void *context_private)
-{
-    struct exa_buffer *exa_buf = exa_get_buffer(surf->buffer);
-
-    ErrorF("WANT TO FLUSH\n");
-}
-
-static const char *
-exa_get_name(struct pipe_winsys *pws)
-{
-    return "EXA";
-}
-
-static struct pipe_buffer *
-exa_buffer_create(struct pipe_winsys *pws,
-		  unsigned alignment, unsigned usage, unsigned size)
-{
-    struct exa_buffer *buffer = xcalloc(1, sizeof(struct exa_buffer));
-    struct exa_winsys *exa_winsys = exa_get_winsys(pws);
-    unsigned int flags = 0;
-
-    buffer->base.refcount = 1;
-    buffer->base.alignment = alignment;
-    buffer->base.usage = usage;
-    buffer->base.size = size;
-
-    if (exa_winsys->ms->noEvict) {
-	flags = DRM_BO_FLAG_NO_EVICT;
-	ErrorF("DISPLAY TARGET\n");
-    }
-
-    ErrorF("SIZE %d %d\n", size, alignment);
-    if (!buffer->bo.handle) {
-	// buffer->data = align_malloc(size, alignment);
-	drmBOCreate(exa_winsys->ms->fd, size, 0, NULL,
-		    DRM_BO_FLAG_READ | DRM_BO_FLAG_WRITE |
-		    DRM_BO_FLAG_SHAREABLE | DRM_BO_FLAG_MEM_TT |
-		    DRM_BO_FLAG_MAPPABLE | flags,
-		    0, &buffer->bo);
-    }
-
-    return &buffer->base;
-}
-
-static struct pipe_buffer *
-exa_user_buffer_create(struct pipe_winsys *pws, void *ptr, unsigned bytes)
-{
-    struct exa_buffer *buffer = xcalloc(1, sizeof(struct exa_buffer));
-
-    buffer->base.refcount = 1;
-    buffer->base.size = bytes;
-    buffer->userBuffer = TRUE;
-    //buffer->data = ptr;
-    ErrorF("USERBUFFER\n");
-
-    return &buffer->base;
-}
-
-/**
- * Round n up to next multiple.
- */
-static INLINE unsigned
-round_up(unsigned n, unsigned multiple)
-{
-    return (n + multiple - 1) & ~(multiple - 1);
-}
-
-static int
-exa_surface_alloc_storage(struct pipe_winsys *winsys,
-			  struct pipe_surface *surf,
-			  unsigned width, unsigned height,
-			  enum pipe_format format,
-			  unsigned flags, unsigned tex_usage)
-{
-    const unsigned alignment = 64;
-
-    surf->width = width;
-    surf->height = height;
-    surf->format = format;
-    pf_get_block(format, &surf->block);
-    surf->stride = round_up(surf->nblocksx * surf->block.size, alignment);
-
-    assert(!surf->buffer);
-    surf->buffer = winsys->buffer_create(winsys, alignment,
-					 PIPE_BUFFER_USAGE_PIXEL,
-					 surf->stride * height);
-    if (!surf->buffer)
-	return -1;
-
-    return 0;
-}
-
-/**
- * Called via winsys->surface_alloc() to create new surfaces.
- */
-static struct pipe_surface *
-exa_surface_alloc(struct pipe_winsys *ws)
-{
-    struct exa_surface *wms = xcalloc(1, sizeof(struct exa_surface));
-
-    assert(ws);
-
-    wms->surface.refcount = 1;
-    wms->surface.winsys = ws;
-
-    return &wms->surface;
-}
-
-static void
-exa_surface_release(struct pipe_winsys *winsys, struct pipe_surface **s)
-{
-    struct pipe_surface *surf = *s;
-
-    surf->refcount--;
-    if (surf->refcount == 0) {
-	if (surf->buffer)
-	    pipe_buffer_reference(winsys, &surf->buffer, NULL);
-	free(surf);
-    }
-    *s = NULL;
-}
-
-/*
- * Fence functions - basically nothing to do, as we don't create any actual
- * fence objects.
- */
-static void
-exa_fence_reference(struct pipe_winsys *sws, struct pipe_fence_handle **ptr,
-		    struct pipe_fence_handle *fence)
-{
-}
-
-static int
-exa_fence_signalled(struct pipe_winsys *sws, struct pipe_fence_handle *fence,
-		    unsigned flag)
-{
-    return 0;
-}
-
-static int
-exa_fence_finish(struct pipe_winsys *sws, struct pipe_fence_handle *fence,
-		 unsigned flag)
-{
-    return 0;
-}
-
-struct pipe_winsys *
-exa_get_pipe_winsys(modesettingPtr ms)
-{
-    static struct exa_winsys *ws = NULL;
-
-    if (!ws) {
-	ws = xcalloc(1, sizeof(struct exa_winsys));
-
-	/* Fill in this struct with callbacks that pipe will need to
-	 * communicate with the window system, buffer manager, etc.
-	 */
-	ws->base.buffer_create = exa_buffer_create;
-	ws->base.user_buffer_create = exa_user_buffer_create;
-	ws->base.buffer_map = exa_buffer_map;
-	ws->base.buffer_unmap = exa_buffer_unmap;
-	ws->base.buffer_destroy = exa_buffer_destroy;
-
-	ws->base.surface_alloc = exa_surface_alloc;
-	ws->base.surface_alloc_storage = exa_surface_alloc_storage;
-	ws->base.surface_release = exa_surface_release;
-
-	ws->base.fence_reference = exa_fence_reference;
-	ws->base.fence_signalled = exa_fence_signalled;
-	ws->base.fence_finish = exa_fence_finish;
-
-	ws->base.flush_frontbuffer = exa_flush_frontbuffer;
-	ws->base.get_name = exa_get_name;
-
-	ws->ms = ms;
-    }
-
-    return &ws->base;
-}
-
-/* EXA functions */
-
-struct PixmapPriv
-{
-    drmBO bo;
-#if 0
-    dri_fence *fence;
+#if GLAMO_TRACE_FALL
+	#define GLAMO_FALLBACK(x)              \
+	do {                                   \
+		ErrorF("%s: ", __FUNCTION__);  \
+		ErrorF x;                      \
+		return FALSE;                  \
+	} while (0)
+#else
+	#define GLAMO_FALLBACK(x) return FALSE
 #endif
-    int flags;
 
-    struct pipe_texture *tex;
-    unsigned int color;
-    struct pipe_surface *src_surf;     /* for copies */
+
+struct glamo_exa_pixmap_priv {
+	struct glamo_bo *bo;
 };
 
-static enum pipe_format
-exa_get_pipe_format(int depth)
+
+static const CARD8 GLAMOSolidRop[16] = {
+    /* GXclear      */      0x00,         /* 0 */
+    /* GXand        */      0xa0,         /* src AND dst */
+    /* GXandReverse */      0x50,         /* src AND NOT dst */
+    /* GXcopy       */      0xf0,         /* src */
+    /* GXandInverted*/      0x0a,         /* NOT src AND dst */
+    /* GXnoop       */      0xaa,         /* dst */
+    /* GXxor        */      0x5a,         /* src XOR dst */
+    /* GXor         */      0xfa,         /* src OR dst */
+    /* GXnor        */      0x05,         /* NOT src AND NOT dst */
+    /* GXequiv      */      0xa5,         /* NOT src XOR dst */
+    /* GXinvert     */      0x55,         /* NOT dst */
+    /* GXorReverse  */      0xf5,         /* src OR NOT dst */
+    /* GXcopyInverted*/     0x0f,         /* NOT src */
+    /* GXorInverted */      0xaf,         /* NOT src OR dst */
+    /* GXnand       */      0x5f,         /* NOT src OR NOT dst */
+    /* GXset        */      0xff,         /* 1 */
+};
+
+
+static const CARD8 GLAMOBltRop[16] = {
+    /* GXclear      */      0x00,         /* 0 */
+    /* GXand        */      0x88,         /* src AND dst */
+    /* GXandReverse */      0x44,         /* src AND NOT dst */
+    /* GXcopy       */      0xcc,         /* src */
+    /* GXandInverted*/      0x22,         /* NOT src AND dst */
+    /* GXnoop       */      0xaa,         /* dst */
+    /* GXxor        */      0x66,         /* src XOR dst */
+    /* GXor         */      0xee,         /* src OR dst */
+    /* GXnor        */      0x11,         /* NOT src AND NOT dst */
+    /* GXequiv      */      0x99,         /* NOT src XOR dst */
+    /* GXinvert     */      0x55,         /* NOT dst */
+    /* GXorReverse  */      0xdd,         /* src OR NOT dst */
+    /* GXcopyInverted*/     0x33,         /* NOT src */
+    /* GXorInverted */      0xbb,         /* NOT src OR dst */
+    /* GXnand       */      0x77,         /* NOT src OR NOT dst */
+    /* GXset        */      0xff,         /* 1 */
+};
+
+
+/* Submit the prepared command sequence to the kernel */
+void GlamoDRMDispatch(GlamoPtr pGlamo)
 {
-    switch (depth) {
-    case 32:
-    case 24:
-	return PIPE_FORMAT_A8R8G8B8_UNORM;
-    case 16:
-	return PIPE_FORMAT_R5G6B5_UNORM;
-    case 15:
-	return PIPE_FORMAT_A1R5G5B5_UNORM;
-    case 8:
-    case 4:
-    case 1:
-	return PIPE_FORMAT_A8R8G8B8_UNORM;	/* bad bad bad */
-    default:
-	assert(0);
-	return 0;
-    }
-}
-
-/*
- * EXA functions
- */
-
-static void
-ExaWaitMarker(ScreenPtr pScreen, int marker)
-{
-}
-
-static int
-ExaMarkSync(ScreenPtr pScreen)
-{
-    return 1;
-}
-
-Bool
-ExaPrepareAccess(PixmapPtr pPix, int index)
-{
-    ScreenPtr pScreen = pPix->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
-    struct exa_entity *exa = ms->exa;
-    struct PixmapPriv *priv;
-    int ret;
-
-    priv = exaGetPixmapDriverPrivate(pPix);
-
-    if (!priv)
-	return FALSE;
-
-    if (!priv->tex)
-	return FALSE;
-    {
-	struct pipe_surface *surf =
-	    exa->scrn->get_tex_surface(exa->scrn, priv->tex, 0, 0, 0,
-				       PIPE_BUFFER_USAGE_CPU_READ |
-				       PIPE_BUFFER_USAGE_CPU_WRITE);
-	pPix->devPrivate.ptr =
-	    exa->scrn->surface_map(exa->scrn, surf,
-				   PIPE_BUFFER_USAGE_CPU_READ |
-				   PIPE_BUFFER_USAGE_CPU_WRITE);
-	exa->scrn->tex_surface_release(exa->scrn, &surf);
-    }
-
-    return TRUE;
-}
-
-void
-ExaFinishAccess(PixmapPtr pPix, int index)
-{
-    ScreenPtr pScreen = pPix->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
-    struct PixmapPriv *priv;
-    struct exa_entity *exa = ms->exa;
-    int ret;
-
-    priv = exaGetPixmapDriverPrivate(pPix);
-
-    if (!priv)
-	return;
-
-    if (!priv->tex)
-	return;
-    {
-	struct pipe_surface *surf =
-	    exa->scrn->get_tex_surface(exa->scrn, priv->tex, 0, 0, 0,
-				       PIPE_BUFFER_USAGE_CPU_READ |
-				       PIPE_BUFFER_USAGE_CPU_WRITE);
-	exa->scrn->surface_unmap(exa->scrn, surf);
-	exa->scrn->tex_surface_release(exa->scrn, &surf);
-	pPix->devPrivate.ptr = NULL;
-    }
-}
-
-static void
-ExaDone(PixmapPtr pPixmap)
-{
-    ScrnInfoPtr pScrn = xf86Screens[pPixmap->drawable.pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct PixmapPriv *priv = exaGetPixmapDriverPrivate(pPixmap);
-    struct exa_entity *exa = ms->exa;
-
-    if (!priv)
-	return;
-
-    if (priv->src_surf)
-	exa->scrn->tex_surface_release(exa->scrn, &priv->src_surf);
-    priv->src_surf = NULL;
-}
-
-static void
-ExaDoneComposite(PixmapPtr pPixmap)
-{
-    ScrnInfoPtr pScrn = xf86Screens[pPixmap->drawable.pScreen->myNum];
-}
-
-static Bool
-ExaPrepareSolid(PixmapPtr pPixmap, int alu, Pixel planeMask, Pixel fg)
-{
-    ScrnInfoPtr pScrn = xf86Screens[pPixmap->drawable.pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct PixmapPriv *priv = exaGetPixmapDriverPrivate(pPixmap);
-    struct exa_entity *exa = ms->exa;
-
-    if (pPixmap->drawable.depth < 15)
-	return FALSE;
-
-    if (!EXA_PM_IS_SOLID(&pPixmap->drawable, planeMask))
-	return FALSE;
-
-    if (!priv || !priv->tex)
-	return FALSE;
-
-    if (alu != GXcopy)
-	return FALSE;
-
-    if (!exa->ctx || !exa->ctx->surface_fill)
-	return FALSE;
-
-    priv->color = fg;
-
-    return TRUE;
-}
-
-static void
-ExaSolid(PixmapPtr pPixmap, int x0, int y0, int x1, int y1)
-{
-    ScrnInfoPtr pScrn = xf86Screens[pPixmap->drawable.pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct exa_entity *exa = ms->exa;
-    struct PixmapPriv *priv = exaGetPixmapDriverPrivate(pPixmap);
-    struct pipe_surface *surf =
-	exa->scrn->get_tex_surface(exa->scrn, priv->tex, 0, 0, 0,
-				   PIPE_BUFFER_USAGE_GPU_READ |
-				   PIPE_BUFFER_USAGE_GPU_WRITE);
-
-    exa->ctx->surface_fill(exa->ctx, surf, x0, y0, x1 - x0, y1 - y0,
-			   priv->color);
-
-    exa->scrn->tex_surface_release(exa->scrn, &surf);
-}
-
-static Bool
-ExaPrepareCopy(PixmapPtr pSrcPixmap, PixmapPtr pDstPixmap, int xdir,
-	       int ydir, int alu, Pixel planeMask)
-{
-    ScrnInfoPtr pScrn = xf86Screens[pDstPixmap->drawable.pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct exa_entity *exa = ms->exa;
-    struct pipe_surface *src_surf;
-    struct PixmapPriv *priv = exaGetPixmapDriverPrivate(pDstPixmap);
-    struct PixmapPriv *src_priv = exaGetPixmapDriverPrivate(pSrcPixmap);
-
-    if (alu != GXcopy)
-	return FALSE;
-
-    if (pSrcPixmap->drawable.depth < 15 || pDstPixmap->drawable.depth < 15)
-	return FALSE;
-
-    if (!EXA_PM_IS_SOLID(&pSrcPixmap->drawable, planeMask))
-	return FALSE;
-
-    if (!priv || !src_priv)
-	return FALSE;
-
-    if (!priv->tex || !src_priv->tex)
-	return FALSE;
-
-    if (!exa->ctx || !exa->ctx->surface_copy)
-	return FALSE;
-
-    priv->src_surf =
-	exa->scrn->get_tex_surface(exa->scrn, src_priv->tex, 0, 0, 0,
-				   PIPE_BUFFER_USAGE_GPU_READ |
-				   PIPE_BUFFER_USAGE_GPU_WRITE);
-
-    return FALSE;
-}
-
-static void
-ExaCopy(PixmapPtr pDstPixmap, int srcX, int srcY, int dstX, int dstY,
-	int width, int height)
-{
-    ScrnInfoPtr pScrn = xf86Screens[pDstPixmap->drawable.pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct exa_entity *exa = ms->exa;
-    struct PixmapPriv *priv = exaGetPixmapDriverPrivate(pDstPixmap);
-    struct pipe_surface *surf =
-	exa->scrn->get_tex_surface(exa->scrn, priv->tex, 0, 0, 0,
-				   PIPE_BUFFER_USAGE_GPU_READ |
-				   PIPE_BUFFER_USAGE_GPU_WRITE);
-
-    exa->ctx->surface_copy(exa->ctx, 0, surf, dstX, dstY, priv->src_surf,
-			   srcX, srcY, width, height);
-    exa->scrn->tex_surface_release(exa->scrn, &surf);
-}
-
-static Bool
-ExaPrepareComposite(int op, PicturePtr pSrcPicture,
-		    PicturePtr pMaskPicture, PicturePtr pDstPicture,
-		    PixmapPtr pSrc, PixmapPtr pMask, PixmapPtr pDst)
-{
-    ScreenPtr pScreen = pDst->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-
-    return FALSE;
-}
-
-static Bool
-ExaUploadToScreen(PixmapPtr pDst, int x, int y, int w, int h, char *src,
-		  int src_pitch)
-{
-    ScreenPtr pScreen = pDst->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-
-    ErrorF("UPLOAD\n");
-
-    return FALSE;
-}
-
-static void
-ExaComposite(PixmapPtr pDst, int srcX, int srcY, int maskX, int maskY,
-	     int dstX, int dstY, int width, int height)
-{
-    ScreenPtr pScreen = pDst->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-}
-
-static Bool
-ExaCheckComposite(int op,
-		  PicturePtr pSrcPicture, PicturePtr pMaskPicture,
-		  PicturePtr pDstPicture)
-{
-    DrawablePtr pDraw = pSrcPicture->pDrawable;
-    int w = pDraw->width;
-    int h = pDraw->height;
-
-    return FALSE;
-}
-
-static void *
-ExaCreatePixmap(ScreenPtr pScreen, int size, int align)
-{
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct PixmapPriv *priv;
-    void *virtual;
-
-    priv = xcalloc(1, sizeof(struct PixmapPriv));
-    if (!priv)
-	return NULL;
-
-    return priv;
-}
-
-static void
-ExaDestroyPixmap(ScreenPtr pScreen, void *dPriv)
-{
-    struct PixmapPriv *priv = (struct PixmapPriv *)dPriv;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct exa_entity *exa = ms->exa;
-
-    if (!priv)
-	return;
-
-    if (priv->tex)
-	exa->scrn->texture_release(exa->scrn, &priv->tex);
-
-    xfree(priv);
-}
-
-static Bool
-ExaPixmapIsOffscreen(PixmapPtr pPixmap)
-{
-    struct PixmapPriv *priv;
-    ScreenPtr pScreen = pPixmap->drawable.pScreen;
-    PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
-
-    priv = exaGetPixmapDriverPrivate(pPixmap);
-
-    if (!priv)
-	return FALSE;
-
-    if (priv->tex)
-	return TRUE;
-
-    return FALSE;
-}
-
-/* FIXME !! */
-unsigned int
-driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags)
-{
-    ScreenPtr pScreen = pPixmap->drawable.pScreen;
-    PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct exa_entity *exa = ms->exa;
-    struct exa_buffer *exa_buf;
-    struct pipe_surface *surf;
-    struct PixmapPriv *priv;
-
-    *flags = 0;
-
-    if (!ms->exa) {
-	FatalError("NO MS->EXA\n");
-	return 0;
-    }
-
-    priv = exaGetPixmapDriverPrivate(pPixmap);
-
-    if (!priv) {
-	FatalError("NO PIXMAP PRIVATE\n");
-	return 0;
-    }
-
-    surf =
-	exa->scrn->get_tex_surface(exa->scrn, priv->tex, 0, 0, 0,
-				   PIPE_BUFFER_USAGE_CPU_READ |
-				   PIPE_BUFFER_USAGE_CPU_WRITE);
-    exa_buf = exa_get_buffer(surf->buffer);
-    exa->scrn->tex_surface_release(exa->scrn, &surf);
-
-    if (exa_buf->bo.handle)
-	return exa_buf->bo.handle;
-
-    return 0;
-}
-
-static Bool
-ExaModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
-		      int depth, int bitsPerPixel, int devKind,
-		      pointer pPixData)
-{
-    ScreenPtr pScreen = pPixmap->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-    struct PixmapPriv *priv = exaGetPixmapDriverPrivate(pPixmap);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
-    struct exa_entity *exa = ms->exa;
-
-    if (!priv)
-	return FALSE;
-
-    if (depth <= 0)
-	depth = pPixmap->drawable.depth;
-
-    if (bitsPerPixel <= 0)
-	bitsPerPixel = pPixmap->drawable.bitsPerPixel;
-
-    if (width <= 0)
-	width = pPixmap->drawable.width;
-
-    if (height <= 0)
-	height = pPixmap->drawable.height;
-
-    if (width <= 0 || height <= 0 || depth <= 0)
-	return FALSE;
-
-    miModifyPixmapHeader(pPixmap, width, height, depth,
-			     bitsPerPixel, devKind, NULL);
-
-    /* Deal with screen resize */
-    if (priv->tex) {
-	struct pipe_surface *surf =
-	    exa->scrn->get_tex_surface(exa->scrn, priv->tex, 0, 0, 0,
-				       PIPE_BUFFER_USAGE_CPU_READ |
-				       PIPE_BUFFER_USAGE_CPU_WRITE);
-
-	ErrorF("RESIZE %d %d to %d %d\n", surf->width, surf->height, width,
-	       height);
-	if (surf->width != width || surf->height != height) {
-	    exa->scrn->texture_release(exa->scrn, &priv->tex);
-	    priv->tex = NULL;
+	drm_glamo_cmd_buffer_t cmdbuf;
+	int r;
+
+	cmdbuf.buf = (char *)pGlamo->cmd_queue;
+	cmdbuf.bufsz = pGlamo->cmd_queue->used;
+	cmdbuf.nobjs = pGlamo->cmdq_obj_used;
+	cmdbuf.objs = (uint32_t *)pGlamo->cmdq_objs;
+	cmdbuf.obj_pos = (int *)pGlamo->cmdq_obj_pos;
+
+	r = drmCommandWrite(pGlamo->drm_fd, DRM_GLAMO_CMDBUF,
+	                    &cmdbuf, sizeof(cmdbuf));
+	if ( r != 0 ) {
+		xf86DrvMsg(pGlamo->pScreen->myNum, X_ERROR,
+		           "DRM_GLAMO_CMDBUF failed");
 	}
-	exa->scrn->tex_surface_release(exa->scrn, &surf);
-    }
 
-    if (!priv->tex) {
-	struct pipe_texture template;
-
-	memset(&template, 0, sizeof(template));
-	template.target = PIPE_TEXTURE_2D;
-	template.compressed = 0;
-	template.format = exa_get_pipe_format(depth);
-	pf_get_block(template.format, &template.block);
-	template.width[0] = width;
-	template.height[0] = height;
-	template.depth[0] = 1;
-	template.last_level = 0;
-	template.tex_usage = PIPE_TEXTURE_USAGE_RENDER_TARGET;
-	priv->tex = exa->scrn->texture_create(exa->scrn, &template);
-    }
-
-    return TRUE;
+	pGlamo->cmdq_obj_used = 0;
 }
 
-void
-GlamoKMSExaClose(ScrnInfoPtr pScrn)
+
+unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags)
 {
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct exa_entity *exa = ms->exa;
+	struct glamo_exa_pixmap_priv *priv;
 
-    exaDriverFini(pScrn->pScreen);
+	priv = exaGetPixmapDriverPrivate(pPixmap);
+	if (!priv) {
+		FatalError("NO PIXMAP PRIVATE\n");
+		return 0;
+	}
 
-    dlclose(ms->driver);
+	return priv->bo->handle;
 }
 
-void *GlamoKMSExaInit(ScrnInfoPtr pScrn)
+
+Bool GlamoKMSExaPrepareSolid(PixmapPtr pPix, int alu, Pixel pm, Pixel fg)
 {
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct exa_entity *exa;
-    ExaDriverPtr pExa;
+	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	CARD32 offset;
+	CARD16 op, pitch;
+	FbBits mask;
+	RING_LOCALS;
+	struct glamo_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPix);
 
-    exa = xcalloc(1, sizeof(struct exa_entity));
-    if (!exa)
-	return NULL;
+	if (pPix->drawable.bitsPerPixel != 16)
+		GLAMO_FALLBACK(("Only 16bpp is supported\n"));
 
-    pExa = exaDriverAlloc();
-    if (!pExa) {
-	goto out_err;
-    }
+	mask = FbFullMask(16);
+	if ((pm & mask) != mask)
+		GLAMO_FALLBACK(("Can't do planemask 0x%08x\n",
+				(unsigned int) pm));
 
-    memset(pExa, 0, sizeof(*pExa));
-    pExa->exa_major = 2;
-    pExa->exa_minor = 4;
-    pExa->memoryBase = 0;
-    pExa->memorySize = 0;
-    pExa->offScreenBase = 0;
-    pExa->pixmapOffsetAlign = 0;
-    pExa->pixmapPitchAlign = 1;
-    pExa->flags = EXA_OFFSCREEN_PIXMAPS | EXA_HANDLES_PIXMAPS;
-    pExa->maxX = 8191;		       /* FIXME */
-    pExa->maxY = 8191;		       /* FIXME */
-    pExa->WaitMarker = ExaWaitMarker;
-    pExa->MarkSync = ExaMarkSync;
-    pExa->PrepareSolid = ExaPrepareSolid;
-    pExa->Solid = ExaSolid;
-    pExa->DoneSolid = ExaDone;
-    pExa->PrepareCopy = ExaPrepareCopy;
-    pExa->Copy = ExaCopy;
-    pExa->DoneCopy = ExaDone;
-    pExa->CheckComposite = ExaCheckComposite;
-    pExa->PrepareComposite = ExaPrepareComposite;
-    pExa->Composite = ExaComposite;
-    pExa->DoneComposite = ExaDoneComposite;
-    pExa->PixmapIsOffscreen = ExaPixmapIsOffscreen;
-    pExa->PrepareAccess = ExaPrepareAccess;
-    pExa->FinishAccess = ExaFinishAccess;
-    pExa->UploadToScreen = ExaUploadToScreen;
-    pExa->CreatePixmap = ExaCreatePixmap;
-    pExa->DestroyPixmap = ExaDestroyPixmap;
-    pExa->ModifyPixmapHeader = ExaModifyPixmapHeader;
+	op = GLAMOSolidRop[alu] << 8;
+	offset = exaGetPixmapOffset(pPix);
+	pitch = pPix->devKind;
 
-    if (!exaDriverInit(pScrn->pScreen, pExa)) {
-	goto out_err;
-    }
+	BEGIN_CMDQ(16);
+	OUT_REG_BO(GLAMO_REG_2D_DST_ADDRL, priv->bo);
+	OUT_REG(GLAMO_REG_2D_DST_PITCH, pitch & 0x7ff);
+	OUT_REG(GLAMO_REG_2D_DST_HEIGHT, pPix->drawable.height);
+	OUT_REG(GLAMO_REG_2D_PAT_FG, fg);
+	OUT_REG(GLAMO_REG_2D_COMMAND2, op);
+	OUT_REG(GLAMO_REG_2D_ID1, 0);
+	OUT_REG(GLAMO_REG_2D_ID2, 0);
+	END_CMDQ();
 
-    {
-	char filename[128];
-	char dri_driver_path[] = DRI_DRIVER_PATH;
+	return TRUE;
+}
 
-	snprintf(filename, sizeof filename,
-		 "%s/%s_dri.so", dri_driver_path, "i915");
 
-	ms->driver = dlopen(filename, RTLD_NOW | RTLD_DEEPBIND | RTLD_GLOBAL);
-	if (!ms->driver)
-		FatalError("failed to initialize i915 - for softpipe only.\n");
+void GlamoKMSExaSolid(PixmapPtr pPix, int x1, int y1, int x2, int y2)
+{
+	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	RING_LOCALS;
 
-	exa->c = xcalloc(1, sizeof(struct exa_context));
+	BEGIN_CMDQ(10);
+	OUT_REG(GLAMO_REG_2D_DST_X, x1);
+	OUT_REG(GLAMO_REG_2D_DST_Y, y1);
+	OUT_REG(GLAMO_REG_2D_RECT_WIDTH, x2 - x1);
+	OUT_REG(GLAMO_REG_2D_RECT_HEIGHT, y2 - y1);
+	OUT_REG(GLAMO_REG_2D_COMMAND3, 0);
+	END_CMDQ();
+}
 
-	exa->ws = exa_get_pipe_winsys(ms);
-	if (!exa->ws)
-		FatalError("BAD WINSYS\n");
 
-	exa->scrn = softpipe_create_screen(exa->ws);
-	if (!exa->scrn)
-		FatalError("BAD SCREEN\n");
+void GlamoKMSExaDoneSolid(PixmapPtr pPix)
+{
+	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
 
-	exa->ctx = softpipe_create(exa->scrn, exa->ws, NULL);
-	if (!exa->ctx)
-	   	FatalError("BAD CTX\n");
+	GlamoDRMDispatch(pGlamo);
+	exaMarkSync(pGlamo->pScreen);
+}
 
-	exa->ctx->priv = exa->c;
-    }
 
-    return (void *)exa;
+Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int dy,
+                            int alu, Pixel pm)
+{
+	ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	RING_LOCALS;
+	FbBits mask;
+	CARD32 src_offset, dst_offset;
+	CARD16 src_pitch, dst_pitch;
+	CARD16 op;
+	struct glamo_exa_pixmap_priv *priv_src;
+	struct glamo_exa_pixmap_priv *priv_dst;
 
-  out_err:
-    GlamoKMSExaClose(pScrn);
+	priv_src = exaGetPixmapDriverPrivate(pSrc);
+	priv_dst = exaGetPixmapDriverPrivate(pDst);
 
-    return NULL;
+	if (pSrc->drawable.bitsPerPixel != 16 ||
+	    pDst->drawable.bitsPerPixel != 16)
+		GLAMO_FALLBACK(("Only 16bpp is supported"));
+
+	mask = FbFullMask(16);
+	if ((pm & mask) != mask) {
+		GLAMO_FALLBACK(("Can't do planemask 0x%08x",
+				(unsigned int) pm));
+	}
+
+	src_offset = exaGetPixmapOffset(pSrc);
+	src_pitch = pSrc->devKind;
+
+	dst_offset = exaGetPixmapOffset(pDst);
+	dst_pitch = pDst->devKind;
+
+	op = GLAMOBltRop[alu] << 8;
+
+	BEGIN_CMDQ(20);
+	OUT_REG_BO(GLAMO_REG_2D_SRC_ADDRL, priv_src->bo);
+	OUT_REG(GLAMO_REG_2D_SRC_PITCH, src_pitch & 0x7ff);
+
+	OUT_REG_BO(GLAMO_REG_2D_DST_ADDRL, priv_dst->bo);
+	OUT_REG(GLAMO_REG_2D_DST_PITCH, dst_pitch & 0x7ff);
+	OUT_REG(GLAMO_REG_2D_DST_HEIGHT, pDst->drawable.height);
+
+	OUT_REG(GLAMO_REG_2D_COMMAND2, op);
+	OUT_REG(GLAMO_REG_2D_ID1, 0);
+	OUT_REG(GLAMO_REG_2D_ID2, 0);
+	END_CMDQ();
+
+	return TRUE;
+}
+
+
+void GlamoKMSExaCopy(PixmapPtr pDst, int srcX, int srcY, int dstX, int dstY,
+                     int width, int height)
+{
+	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	RING_LOCALS;
+
+	BEGIN_CMDQ(14);
+	OUT_REG(GLAMO_REG_2D_SRC_X, srcX);
+	OUT_REG(GLAMO_REG_2D_SRC_Y, srcY);
+	OUT_REG(GLAMO_REG_2D_DST_X, dstX);
+	OUT_REG(GLAMO_REG_2D_DST_Y, dstY);
+	OUT_REG(GLAMO_REG_2D_RECT_WIDTH, width);
+	OUT_REG(GLAMO_REG_2D_RECT_HEIGHT, height);
+	OUT_REG(GLAMO_REG_2D_COMMAND3, 0);
+	END_CMDQ();
+}
+
+
+void GlamoKMSExaDoneCopy(PixmapPtr pDst)
+{
+	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+	GlamoDRMDispatch(pGlamo);
+	exaMarkSync(pGlamo->pScreen);
+}
+
+
+Bool GlamoKMSExaCheckComposite(int op,
+		       PicturePtr   pSrcPicture,
+		       PicturePtr   pMaskPicture,
+		       PicturePtr   pDstPicture)
+{
+	return FALSE;
+}
+
+
+Bool GlamoKMSExaPrepareComposite(int op, PicturePtr pSrcPicture,
+                                 PicturePtr pMaskPicture,
+                                 PicturePtr pDstPicture,
+                                 PixmapPtr pSrc,
+                                 PixmapPtr pMask,
+                                 PixmapPtr pDst)
+{
+	return FALSE;
+}
+
+
+void GlamoKMSExaComposite(PixmapPtr pDst, int srcX, int srcY,
+                          int maskX, int maskY, int dstX, int dstY,
+                          int width, int height)
+{
+}
+
+
+void GlamoKMSExaDoneComposite(PixmapPtr pDst)
+{
+}
+
+
+Bool GlamoKMSExaUploadToScreen(PixmapPtr pDst, int x, int y, int w, int h,
+                               char *src, int src_pitch)
+{
+	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	int bpp, i;
+	CARD8 *dst_offset;
+	int dst_pitch;
+
+	bpp = pDst->drawable.bitsPerPixel / 8;
+	dst_pitch = pDst->devKind;
+	dst_offset = pGlamo->exa->memoryBase + exaGetPixmapOffset(pDst)
+						+ x*bpp + y*dst_pitch;
+
+	for (i = 0; i < h; i++) {
+		memcpy(dst_offset, src, w*bpp);
+		dst_offset += dst_pitch;
+		src += src_pitch;
+	}
+
+	return TRUE;
+}
+
+
+Bool GlamoKMSExaDownloadFromScreen(PixmapPtr pSrc, int x, int y, int w, int h,
+                                   char *dst, int dst_pitch)
+{
+	ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	int bpp, i;
+	CARD8 *dst_offset, *src;
+	int src_pitch;
+
+	bpp = pSrc->drawable.bitsPerPixel;
+	bpp /= 8;
+	src_pitch = pSrc->devKind;
+	src = pGlamo->exa->memoryBase + exaGetPixmapOffset(pSrc) +
+						x*bpp + y*src_pitch;
+	dst_offset = (unsigned char*)dst;
+
+	for (i = 0; i < h; i++) {
+		memcpy(dst_offset, src, w*bpp);
+		dst_offset += dst_pitch;
+		src += src_pitch;
+	}
+
+	return TRUE;
+}
+
+
+void GlamoKMSExaWaitMarker(ScreenPtr pScreen, int marker)
+{
+//	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+//	GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+//	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
+	// FIXME
+}
+
+
+static void *GlamoKMSExaCreatePixmap(ScreenPtr screen, int size, int align)
+{
+	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	struct glamo_exa_pixmap_priv *new_priv;
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Creating a new pixmap, size=%i\n",
+			size);
+
+	new_priv = xcalloc(1, sizeof(struct glamo_exa_pixmap_priv));
+	if (!new_priv)
+		return NULL;
+
+	/* See GlamoKMSExaModifyPixmapHeader() below */
+	if (size == 0)
+		return new_priv;
+
+	/* Dive into the kernel (via libdrm) to allocate some VRAM */
+	new_priv->bo = pGlamo->bufmgr->funcs->bo_open(pGlamo->bufmgr,
+						      0, /* handle */
+						      size,
+						      align,
+						      GLAMO_GEM_DOMAIN_VRAM,
+						      0 /* flags */	      );
+	if (!new_priv->bo) {
+		xfree(new_priv);
+		return NULL;
+	}
+
+	return new_priv;
+}
+
+
+static void GlamoKMSExaDestroyPixmap(ScreenPtr screen, void *driverPriv)
+{
+	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	struct glamo_exa_pixmap_priv *driver_priv = driverPriv;
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Destroying a pixmap\n");
+
+	if (driver_priv->bo)
+		pGlamo->bufmgr->funcs->bo_unref(driver_priv->bo);
+	xfree(driver_priv);
+}
+
+
+static Bool GlamoKMSExaPixmapIsOffscreen(PixmapPtr pPix)
+{
+	struct glamo_exa_pixmap_priv *driver_priv;
+
+	driver_priv = exaGetPixmapDriverPrivate(pPix);
+	if (driver_priv && driver_priv->bo)
+		return TRUE;
+
+	return FALSE;
+}
+
+
+static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
+{
+	ScreenPtr screen = pPix->drawable.pScreen;
+	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	struct glamo_exa_pixmap_priv *driver_priv;
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Prepare access\n");
+
+	driver_priv = exaGetPixmapDriverPrivate(pPix);
+	if (!driver_priv) {
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				"%s: no driver private?\n", __FUNCTION__);
+		return FALSE;
+	}
+
+	if (!driver_priv->bo) {
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				"%s: no buffer object?\n", __FUNCTION__);
+		return TRUE;
+	}
+
+	if (pGlamo->bufmgr->funcs->bo_map(driver_priv->bo, 1)) {
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				"%s: bo map failed\n", __FUNCTION__);
+		return FALSE;
+	}
+	pPix->devPrivate.ptr = driver_priv->bo->ptr;
+
+	return TRUE;
+}
+
+
+static void GlamoKMSExaFinishAccess(PixmapPtr pPix, int index)
+{
+	ScreenPtr screen = pPix->drawable.pScreen;
+	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	struct glamo_exa_pixmap_priv *driver_priv;
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Finish access\n");
+
+	driver_priv = exaGetPixmapDriverPrivate(pPix);
+	if (!driver_priv) {
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				"%s: no driver private?\n", __FUNCTION__);
+		return;
+	}
+
+	if (!driver_priv->bo) {
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				"%s: no buffer object?\n", __FUNCTION__);
+		return;
+	}
+
+	pGlamo->bufmgr->funcs->bo_unmap(driver_priv->bo);
+	pPix->devPrivate.ptr = NULL;
+}
+
+
+static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
+                                          int depth, int bitsPerPixel,
+                                          int devKind, pointer pPixData)
+{
+	ScreenPtr screen = pPix->drawable.pScreen;
+	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
+//	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	PixmapPtr screen_pixmap = screen->GetScreenPixmap(screen);
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "ModifyPixmapHeader. "
+	                                     "%ix%ix%i %ibpp, %i\n",
+	                                     width, height, depth,
+	                                     bitsPerPixel, devKind);
+
+	miModifyPixmapHeader(pPix, width, height, depth,
+	                     bitsPerPixel, devKind, NULL);
+
+	if ( pPix == screen_pixmap ) {
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Screen pixmap!");
+	}
+
+
+	return FALSE;
+}
+
+
+void GlamoKMSExaClose(ScrnInfoPtr pScrn)
+{
+	exaDriverFini(pScrn->pScreen);
+}
+
+
+void GlamoKMSExaInit(ScrnInfoPtr pScrn)
+{
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+
+	Bool success = FALSE;
+	ExaDriverPtr exa;
+
+	xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+			"EXA hardware acceleration initialising\n");
+
+	exa = exaDriverAlloc();
+	if ( !exa ) return;
+	pGlamo->exa = exa;
+
+	exa->memoryBase = 0;
+	exa->memorySize = 0;
+	exa->offScreenBase = 0;
+
+	exa->exa_major = EXA_VERSION_MAJOR;
+	exa->exa_minor = EXA_VERSION_MINOR;
+
+	/* Solid fills */
+	exa->PrepareSolid = GlamoKMSExaPrepareSolid;
+	exa->Solid = GlamoKMSExaSolid;
+	exa->DoneSolid = GlamoKMSExaDoneSolid;
+
+	/* Blits */
+	exa->PrepareCopy = GlamoKMSExaPrepareCopy;
+	exa->Copy = GlamoKMSExaCopy;
+	exa->DoneCopy = GlamoKMSExaDoneCopy;
+
+	/* Composite (though these just cause fallback) */
+	exa->CheckComposite = GlamoKMSExaCheckComposite;
+	exa->PrepareComposite = GlamoKMSExaPrepareComposite;
+	exa->Composite = GlamoKMSExaComposite;
+	exa->DoneComposite = GlamoKMSExaDoneComposite;
+
+	exa->DownloadFromScreen = GlamoKMSExaDownloadFromScreen;
+	exa->UploadToScreen = GlamoKMSExaUploadToScreen;
+
+//	exa->MarkSync = GlamoKMSExaMarkSync;
+	exa->WaitMarker = GlamoKMSExaWaitMarker;
+
+	exa->pixmapOffsetAlign = 2;
+	exa->pixmapPitchAlign = 2;
+
+	exa->maxX = 640;
+	exa->maxY = 640;
+
+	pGlamo->cmdq_objs = malloc(1024);
+	pGlamo->cmdq_obj_pos = malloc(1024);
+	pGlamo->cmdq_obj_used = 0;
+
+	/* Tell EXA that we're going to take care of memory
+	 * management ourselves. */
+	exa->flags = EXA_OFFSCREEN_PIXMAPS | EXA_HANDLES_PIXMAPS;
+	exa->PrepareAccess = GlamoKMSExaPrepareAccess;
+	exa->FinishAccess = GlamoKMSExaFinishAccess;
+	exa->CreatePixmap = GlamoKMSExaCreatePixmap;
+	exa->DestroyPixmap = GlamoKMSExaDestroyPixmap;
+	exa->PixmapIsOffscreen = GlamoKMSExaPixmapIsOffscreen;
+	exa->ModifyPixmapHeader = GlamoKMSExaModifyPixmapHeader;
+
+	success = exaDriverInit(pGlamo->pScreen, exa);
+	if (success) {
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			"Initialized EXA acceleration\n");
+	} else {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			"Failed to initialize EXA acceleration\n");
+		xfree(pGlamo->exa);
+		pGlamo->exa = NULL;
+	}
 }
