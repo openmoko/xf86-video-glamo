@@ -24,5 +24,3 @@
 
 extern void driScreenInit(ScreenPtr pScreen);
 extern void driCloseScreen(ScreenPtr pScreen);
-extern void driLock(ScreenPtr pScreen);
-extern void driUnlock(ScreenPtr pScreen);

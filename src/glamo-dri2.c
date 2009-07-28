@@ -181,6 +181,5 @@ void driScreenInit(ScreenPtr pScreen)
 
 void driCloseScreen(ScreenPtr pScreen)
 {
-	driUnlock(pScreen);
 	DRI2CloseScreen(pScreen);
 }

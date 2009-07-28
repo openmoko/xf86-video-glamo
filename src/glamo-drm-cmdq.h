@@ -109,7 +109,7 @@ do {									\
        __packet0count = n;						\
 } while (0)
 
-#endif
+#endif /* CCE_DEBUG */
 
 #define OUT_PAIR(v1, v2)						\
 do {									\

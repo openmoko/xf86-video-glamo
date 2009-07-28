@@ -58,6 +58,7 @@
 
 #include <drm/glamo_drm.h>
 #include <drm/glamo_bo.h>
+#include <drm/glamo_bo_gem.h>
 #include <xf86drm.h>
 
 
@@ -150,6 +151,9 @@ unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags)
 		FatalError("NO PIXMAP PRIVATE\n");
 		return 0;
 	}
+	xf86Msg(X_INFO, "priv=%p\n", (void *)priv);
+	xf86Msg(X_INFO, "priv->bo=%p\n", (void *)priv->bo);
+	xf86Msg(X_INFO, "priv->bo->handle=%i\n", priv->bo->handle);
 
 	return priv->bo->handle;
 }
@@ -159,22 +163,22 @@ Bool GlamoKMSExaPrepareSolid(PixmapPtr pPix, int alu, Pixel pm, Pixel fg)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	CARD32 offset;
 	CARD16 op, pitch;
 	FbBits mask;
 	RING_LOCALS;
 	struct glamo_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPix);
 
-	if (pPix->drawable.bitsPerPixel != 16)
+	if (pPix->drawable.bitsPerPixel != 16) {
 		GLAMO_FALLBACK(("Only 16bpp is supported\n"));
+	}
 
 	mask = FbFullMask(16);
-	if ((pm & mask) != mask)
+	if ((pm & mask) != mask) {
 		GLAMO_FALLBACK(("Can't do planemask 0x%08x\n",
-				(unsigned int) pm));
+		               (unsigned int)pm));
+	}
 
 	op = GLAMOSolidRop[alu] << 8;
-	offset = exaGetPixmapOffset(pPix);
 	pitch = pPix->devKind;
 
 	BEGIN_CMDQ(16);
@@ -379,6 +383,8 @@ static void *GlamoKMSExaCreatePixmap(ScreenPtr screen, int size, int align)
 						      0 /* flags */	      );
 	if (!new_priv->bo) {
 		xfree(new_priv);
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+		           "Failed to create pixmap\n");
 		return NULL;
 	}
 
@@ -478,21 +484,54 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 {
 	ScreenPtr screen = pPix->drawable.pScreen;
 	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
-//	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	PixmapPtr screen_pixmap = screen->GetScreenPixmap(screen);
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	struct glamo_exa_pixmap_priv *priv;
 
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "ModifyPixmapHeader. "
 	                                     "%ix%ix%i %ibpp, %i\n",
 	                                     width, height, depth,
 	                                     bitsPerPixel, devKind);
 
+	if (depth <= 0) depth = pPix->drawable.depth;
+	if (bitsPerPixel <= 0) bitsPerPixel = pPix->drawable.bitsPerPixel;
+	if (width <= 0) width = pPix->drawable.width;
+	if (height <= 0) height = pPix->drawable.height;
+	if (width <= 0 || height <= 0 || depth <= 0) return FALSE;
+
 	miModifyPixmapHeader(pPix, width, height, depth,
 	                     bitsPerPixel, devKind, NULL);
 
-	if ( pPix == screen_pixmap ) {
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Screen pixmap!");
+	priv = exaGetPixmapDriverPrivate(pPix);
+	if (!priv) {
+		/* This should never, ever, happen */
+		FatalError("NO PIXMAP PRIVATE\n");
+		return FALSE;
 	}
 
+	if ( priv->bo == NULL ) {
+
+		int size;
+
+		/* This pixmap has no associated buffer object.
+		 * It's time to create one */
+		size = width * height * (depth/8);
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Creating pixmap BO"
+		                                     " (%i bytes)\n", size);
+		priv->bo = pGlamo->bufmgr->funcs->bo_open(pGlamo->bufmgr,
+		                                          0, /* handle */
+		                                          size,
+		                                          2,
+		                                          GLAMO_GEM_DOMAIN_VRAM,
+		                                          0 /* flags */       );
+
+		if ( priv->bo == NULL ) {
+			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				   "Failed to create buffer object"
+				   " in ModifyPixmapHeader.\n");
+			return FALSE;
+		}
+
+	}
 
 	return FALSE;
 }
@@ -507,9 +546,9 @@ void GlamoKMSExaClose(ScrnInfoPtr pScrn)
 void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 {
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-
 	Bool success = FALSE;
 	ExaDriverPtr exa;
+	MemBuf *buf;
 
 	xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 			"EXA hardware acceleration initialising\n");
@@ -551,10 +590,16 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 //	exa->MarkSync = GlamoKMSExaMarkSync;
 	exa->WaitMarker = GlamoKMSExaWaitMarker;
 
-
+	/* Prepare temporary buffers */
 	pGlamo->cmdq_objs = malloc(1024);
 	pGlamo->cmdq_obj_pos = malloc(1024);
 	pGlamo->cmdq_obj_used = 0;
+	pGlamo->ring_len = 4 * 1024;
+	buf = (MemBuf *)xcalloc(1, sizeof(MemBuf) + pGlamo->ring_len);
+	if (!buf) return;
+	buf->size = pGlamo->ring_len;
+	buf->used = 0;
+	pGlamo->cmd_queue = buf;
 
 	/* Tell EXA that we're going to take care of memory
 	 * management ourselves. */
