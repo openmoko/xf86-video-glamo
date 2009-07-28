@@ -135,7 +135,7 @@ void GlamoDRMDispatch(GlamoPtr pGlamo)
 	                    &cmdbuf, sizeof(cmdbuf));
 	if ( r != 0 ) {
 		xf86DrvMsg(pGlamo->pScreen->myNum, X_ERROR,
-		           "DRM_GLAMO_CMDBUF failed");
+		           "DRM_GLAMO_CMDBUF failed\n");
 	}
 
 	pGlamo->cmdq_obj_used = 0;
