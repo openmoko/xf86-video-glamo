@@ -278,13 +278,101 @@ GlamoIdentify(int flags)
 }
 
 static Bool
+GlamoFbdevProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
+{
+	char *dev;
+	Bool foundScreen = FALSE;
+	int i;
+	ScrnInfoPtr pScrn;
+
+	if (!xf86LoadDrvSubModule(drv, "fbdevhw")) return FALSE;
+
+	for (i = 0; i < numDevSections; i++) {
+
+		dev = xf86FindOptionValue(devSections[i]->options, "Device");
+		if (fbdevHWProbe(NULL, dev, NULL)) {
+			int entity;
+			pScrn = NULL;
+
+			entity = xf86ClaimFbSlot(drv, 0, devSections[i], TRUE);
+			pScrn = xf86ConfigFbEntity(pScrn,0,entity, NULL, NULL,
+				                   NULL, NULL);
+
+			if (pScrn) {
+
+				foundScreen = TRUE;
+
+				pScrn->driverVersion = GLAMO_VERSION;
+				pScrn->driverName    = GLAMO_DRIVER_NAME;
+				pScrn->name          = GLAMO_NAME;
+				pScrn->Probe         = GlamoProbe;
+				pScrn->PreInit       = GlamoPreInit;
+				pScrn->ScreenInit    = GlamoScreenInit;
+				pScrn->SwitchMode    = GlamoSwitchMode;
+				pScrn->AdjustFrame   = fbdevHWAdjustFrameWeak();
+				pScrn->EnterVT       = GlamoEnterVT;
+				pScrn->LeaveVT       = GlamoLeaveVT;
+				pScrn->ValidMode     = fbdevHWValidModeWeak();
+
+				xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+					   "using %s\n",
+					   dev ? dev : "default device\n");
+
+			}
+		}
+
+	}
+
+	return foundScreen;
+}
+
+static Bool
+GlamoKMSProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
+{
+	ScrnInfoPtr pScrn = NULL;
+	int entity;
+	Bool foundScreen = FALSE;
+	int i;
+
+	for ( i = 0; i < numDevSections; i++ ) {
+
+		/* This is a little dodgy.  We aren't really using fbdevhw
+		 * (/dev/fb0 is irrelevant), but we need a device entity to make
+		 * the later stages of initialisation work.  xf86ClaimFbSlot()
+		 * does the minimum required to make this work, so we use it
+		 * despite the above. */
+		entity = xf86ClaimFbSlot(drv, 0, devSections[i], TRUE);
+		pScrn = xf86ConfigFbEntity(pScrn, 0, entity, NULL, NULL, NULL,
+		                           NULL);
+
+		if ( pScrn ) {
+
+			foundScreen = TRUE;
+
+			/* Plug in KMS functions */
+			pScrn->driverVersion = GLAMO_VERSION;
+			pScrn->driverName    = GLAMO_DRIVER_NAME;
+			pScrn->name          = GLAMO_NAME;
+			pScrn->PreInit       = GlamoKMSPreInit;
+			pScrn->ScreenInit    = GlamoKMSScreenInit;
+			pScrn->SwitchMode    = GlamoKMSSwitchMode;
+			pScrn->AdjustFrame   = GlamoKMSAdjustFrame;
+			pScrn->EnterVT       = GlamoKMSEnterVT;
+			pScrn->LeaveVT       = GlamoKMSLeaveVT;
+			pScrn->ValidMode     = GlamoKMSValidMode;
+
+		}
+	}
+
+	return foundScreen;
+}
+
+static Bool
 GlamoProbe(DriverPtr drv, int flags)
 {
-	int i;
 	ScrnInfoPtr pScrn;
 	GDevPtr *devSections;
 	int numDevSections;
-	char *dev;
 	Bool foundScreen = FALSE;
 
 	TRACE("probe start");
@@ -294,75 +382,15 @@ GlamoProbe(DriverPtr drv, int flags)
 		return FALSE;
 
 	numDevSections = xf86MatchDevice(GLAMO_DRIVER_NAME, &devSections);
-	if (numDevSections <= 0)
-		return FALSE;
+	if (numDevSections <= 0) return FALSE;
 
 	/* Is today a good day to use KMS? */
 	if ( GlamoKernelModesettingAvailable() ) {
-
-		foundScreen = TRUE;
-
-		pScrn = xf86AllocateScreen(drv, 0);
-
-		/* Plug in KMS functions instead of the conventional ones */
-		pScrn->driverVersion = GLAMO_VERSION;
-		pScrn->driverName    = GLAMO_DRIVER_NAME;
-		pScrn->name          = GLAMO_NAME;
-		pScrn->PreInit       = GlamoKMSPreInit;
-		pScrn->ScreenInit    = GlamoKMSScreenInit;
-		pScrn->SwitchMode    = GlamoKMSSwitchMode;
-		pScrn->AdjustFrame   = GlamoKMSAdjustFrame;
-		pScrn->EnterVT       = GlamoKMSEnterVT;
-		pScrn->LeaveVT       = GlamoKMSLeaveVT;
-		pScrn->ValidMode     = GlamoKMSValidMode;
-
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using KMS!");
-
+		foundScreen = GlamoKMSProbe(drv, devSections, numDevSections);
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using KMS!\n");
 	} else {
-
-		if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
-			return FALSE;
-
-		for (i = 0; i < numDevSections; i++) {
-			dev = xf86FindOptionValue(devSections[i]->options,
-			                          "Device");
-			if (fbdevHWProbe(NULL, dev, NULL)) {
-				int entity;
-				pScrn = NULL;
-
-				entity = xf86ClaimFbSlot(drv, 0, devSections[i],
-				                         TRUE);
-				pScrn = xf86ConfigFbEntity(pScrn,0,entity, NULL,
-					                   NULL, NULL, NULL);
-
-				if (pScrn) {
-					foundScreen = TRUE;
-
-					pScrn->driverVersion = GLAMO_VERSION;
-					pScrn->driverName    = GLAMO_DRIVER_NAME;
-					pScrn->name          = GLAMO_NAME;
-					pScrn->Probe         = GlamoProbe;
-					pScrn->PreInit       = GlamoPreInit;
-					pScrn->ScreenInit    = GlamoScreenInit;
-					pScrn->SwitchMode    = GlamoSwitchMode;
-					pScrn->AdjustFrame
-					             = fbdevHWAdjustFrameWeak();
-					pScrn->EnterVT       = GlamoEnterVT;
-					pScrn->LeaveVT       = GlamoLeaveVT;
-					pScrn->ValidMode
-					             = fbdevHWValidModeWeak();
-
-					xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-						   "using %s\n",
-						   dev ? dev : "default device");
-
-					xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-					           "Not using KMS");
-
-				}
-			}
-		}
-
+		foundScreen = GlamoFbdevProbe(drv, devSections, numDevSections);
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Not using KMS\n");
 	}
 
 	xfree(devSections);

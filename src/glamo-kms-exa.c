@@ -518,12 +518,15 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	if ( !exa ) return;
 	pGlamo->exa = exa;
 
+	exa->exa_major = EXA_VERSION_MAJOR;
+	exa->exa_minor = EXA_VERSION_MINOR;
 	exa->memoryBase = 0;
 	exa->memorySize = 0;
 	exa->offScreenBase = 0;
-
-	exa->exa_major = EXA_VERSION_MAJOR;
-	exa->exa_minor = EXA_VERSION_MINOR;
+	exa->pixmapOffsetAlign = 2;
+	exa->pixmapPitchAlign = 2;
+	exa->maxX = 640;
+	exa->maxY = 640;
 
 	/* Solid fills */
 	exa->PrepareSolid = GlamoKMSExaPrepareSolid;
@@ -548,11 +551,6 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 //	exa->MarkSync = GlamoKMSExaMarkSync;
 	exa->WaitMarker = GlamoKMSExaWaitMarker;
 
-	exa->pixmapOffsetAlign = 2;
-	exa->pixmapPitchAlign = 2;
-
-	exa->maxX = 640;
-	exa->maxY = 640;
 
 	pGlamo->cmdq_objs = malloc(1024);
 	pGlamo->cmdq_obj_pos = malloc(1024);
@@ -568,7 +566,10 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	exa->PixmapIsOffscreen = GlamoKMSExaPixmapIsOffscreen;
 	exa->ModifyPixmapHeader = GlamoKMSExaModifyPixmapHeader;
 
-	success = exaDriverInit(pGlamo->pScreen, exa);
+	/* Hook up with libdrm */
+	pGlamo->bufmgr = glamo_bo_manager_gem_ctor(pGlamo->drm_fd);
+
+	success = exaDriverInit(pScrn->pScreen, exa);
 	if (success) {
 		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 			"Initialized EXA acceleration\n");

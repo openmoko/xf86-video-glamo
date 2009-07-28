@@ -212,8 +212,8 @@ Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags)
 	pScrn->progClock = TRUE;
 	pScrn->rgbBits = 8;
 
-	if ( !xf86SetDepthBpp(pScrn, 0, 0, 0, PreferConvert24to32
-	                       | SupportConvert24to32 | Support32bppFb) ) {
+	/* Prefer 16bpp for everything */
+	if ( !xf86SetDepthBpp(pScrn, 16, 16, 16, NoDepth24Support) ) {
 		return FALSE;
 	}
 
@@ -341,6 +341,7 @@ Bool GlamoKMSScreenInit(int scrnIndex, ScreenPtr pScreen, int argc,
 	}
 
 	pScrn->pScreen = pScreen;
+	pGlamo->pScreen = pScreen;
 
 	/* HW dependent - FIXME */
 	pScrn->displayWidth = pScrn->virtualX;
