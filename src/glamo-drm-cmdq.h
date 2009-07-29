@@ -31,7 +31,7 @@
 #if !CCE_DEBUG
 
 #define RING_LOCALS	CARD16 *__head; int __count; int __objects;     \
-                        char *__objs; char *__obj_pos;
+                        uint32_t *__objs; unsigned int *__obj_pos;
 
 #define BEGIN_CMDQ(n)							\
 do {									\
@@ -64,7 +64,7 @@ do {									\
 
 #define RING_LOCALS                                                     \
 	CARD16 *__head; int __count, __total, __reg, __packet0count;    \
-	int __objects; char *__objs; char *__obj_pos;
+	int __objects; uint32_t *__objs; unsigned int *__obj_pos;
 
 #define BEGIN_CMDQ(n)							\
 do {									\

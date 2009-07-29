@@ -107,8 +107,8 @@ typedef struct {
 	 */
 	MemBuf *cmd_queue;
 	int cmdq_obj_used;
-	char *cmdq_objs;
-	char *cmdq_obj_pos;
+	uint32_t *cmdq_objs;
+	unsigned int *cmdq_obj_pos;
 
 	/* What was GLAMOCardInfo */
 	volatile char *reg_base;

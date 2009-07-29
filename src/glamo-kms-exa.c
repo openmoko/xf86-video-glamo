@@ -129,7 +129,7 @@ void GlamoDRMDispatch(GlamoPtr pGlamo)
 	cmdbuf.bufsz = pGlamo->cmd_queue->used;
 	cmdbuf.nobjs = pGlamo->cmdq_obj_used;
 	cmdbuf.objs = (uint32_t *)pGlamo->cmdq_objs;
-	cmdbuf.obj_pos = (int *)pGlamo->cmdq_obj_pos;
+	cmdbuf.obj_pos = pGlamo->cmdq_obj_pos;
 
 	r = drmCommandWrite(pGlamo->drm_fd, DRM_GLAMO_CMDBUF,
 	                    &cmdbuf, sizeof(cmdbuf));
@@ -445,7 +445,7 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 				"%s: bo map failed\n", __FUNCTION__);
 		return FALSE;
 	}
-	pPix->devPrivate.ptr = driver_priv->bo->ptr;
+	pPix->devPrivate.ptr = driver_priv->bo->virtual;
 
 	return TRUE;
 }
