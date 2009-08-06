@@ -54,7 +54,6 @@
 #include "glamo-log.h"
 #include "glamo.h"
 #include "glamo-regs.h"
-#include "glamo-drm-cmdq.h"
 
 #include <drm/glamo_drm.h>
 #include <drm/glamo_bo.h>
@@ -119,16 +118,42 @@ static const CARD8 GLAMOBltRop[16] = {
 };
 
 
+static inline void GlamoDRMAddCommand(GlamoPtr pGlamo, uint16_t reg,
+                                      uint16_t val)
+{
+	/* Record command */
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg;
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = val;
+}
+
+
+static inline void GlamoDRMAddCommandBO(GlamoPtr pGlamo, uint16_t reg,
+                                        struct glamo_bo *bo)
+{
+	/* Record object position */
+	pGlamo->cmdq_objs[pGlamo->cmdq_obj_used] = bo->handle;
+	/* -> bytes */
+	pGlamo->cmdq_obj_pos[pGlamo->cmdq_obj_used] = pGlamo->cmdq_drm_used * 2;
+	pGlamo->cmdq_obj_used++;
+
+	/* Record command */
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg;
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg+2;
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
+}
+
+
 /* Submit the prepared command sequence to the kernel */
-void GlamoDRMDispatch(GlamoPtr pGlamo)
+static void GlamoDRMDispatch(GlamoPtr pGlamo)
 {
 	drm_glamo_cmd_buffer_t cmdbuf;
 	int r;
 
-	cmdbuf.buf = (char *)pGlamo->cmd_queue;
-	cmdbuf.bufsz = pGlamo->cmd_queue->used;
+	cmdbuf.buf = (char *)pGlamo->cmdq_drm;
+	cmdbuf.bufsz = pGlamo->cmdq_drm_used * 2;	/* -> bytes */
 	cmdbuf.nobjs = pGlamo->cmdq_obj_used;
-	cmdbuf.objs = (uint32_t *)pGlamo->cmdq_objs;
+	cmdbuf.objs = pGlamo->cmdq_objs;
 	cmdbuf.obj_pos = pGlamo->cmdq_obj_pos;
 
 	r = drmCommandWrite(pGlamo->drm_fd, DRM_GLAMO_CMDBUF,
@@ -138,7 +163,9 @@ void GlamoDRMDispatch(GlamoPtr pGlamo)
 		           "DRM_GLAMO_CMDBUF failed\n");
 	}
 
+	/* Reset counts to zero for the next sequence */
 	pGlamo->cmdq_obj_used = 0;
+	pGlamo->cmdq_drm_used = 0;
 }
 
 
@@ -151,9 +178,6 @@ unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags)
 		FatalError("NO PIXMAP PRIVATE\n");
 		return 0;
 	}
-	xf86Msg(X_INFO, "priv=%p\n", (void *)priv);
-	xf86Msg(X_INFO, "priv->bo=%p\n", (void *)priv->bo);
-	xf86Msg(X_INFO, "priv->bo->handle=%i\n", priv->bo->handle);
 
 	return priv->bo->handle;
 }
@@ -165,7 +189,6 @@ Bool GlamoKMSExaPrepareSolid(PixmapPtr pPix, int alu, Pixel pm, Pixel fg)
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	CARD16 op, pitch;
 	FbBits mask;
-	RING_LOCALS;
 	struct glamo_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPix);
 
 	if (pPix->drawable.bitsPerPixel != 16) {
@@ -181,15 +204,13 @@ Bool GlamoKMSExaPrepareSolid(PixmapPtr pPix, int alu, Pixel pm, Pixel fg)
 	op = GLAMOSolidRop[alu] << 8;
 	pitch = pPix->devKind;
 
-	BEGIN_CMDQ(16);
-	OUT_REG_BO(GLAMO_REG_2D_DST_ADDRL, priv->bo);
-	OUT_REG(GLAMO_REG_2D_DST_PITCH, pitch & 0x7ff);
-	OUT_REG(GLAMO_REG_2D_DST_HEIGHT, pPix->drawable.height);
-	OUT_REG(GLAMO_REG_2D_PAT_FG, fg);
-	OUT_REG(GLAMO_REG_2D_COMMAND2, op);
-	OUT_REG(GLAMO_REG_2D_ID1, 0);
-	OUT_REG(GLAMO_REG_2D_ID2, 0);
-	END_CMDQ();
+	GlamoDRMAddCommandBO(pGlamo, GLAMO_REG_2D_DST_ADDRL, priv->bo);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_PITCH, pitch & 0x7ff);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_HEIGHT, pPix->drawable.height);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_PAT_FG, fg);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_COMMAND2, op);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_ID1, 0);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_ID2, 0);
 
 	return TRUE;
 }
@@ -199,15 +220,12 @@ void GlamoKMSExaSolid(PixmapPtr pPix, int x1, int y1, int x2, int y2)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	RING_LOCALS;
 
-	BEGIN_CMDQ(10);
-	OUT_REG(GLAMO_REG_2D_DST_X, x1);
-	OUT_REG(GLAMO_REG_2D_DST_Y, y1);
-	OUT_REG(GLAMO_REG_2D_RECT_WIDTH, x2 - x1);
-	OUT_REG(GLAMO_REG_2D_RECT_HEIGHT, y2 - y1);
-	OUT_REG(GLAMO_REG_2D_COMMAND3, 0);
-	END_CMDQ();
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_X, x1);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_Y, y1);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_RECT_WIDTH, x2 - x1);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_RECT_HEIGHT, y2 - y1);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_COMMAND3, 0);
 }
 
 
@@ -226,7 +244,6 @@ Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int dy,
 {
 	ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	RING_LOCALS;
 	FbBits mask;
 	CARD32 src_offset, dst_offset;
 	CARD16 src_pitch, dst_pitch;
@@ -255,18 +272,16 @@ Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int dy,
 
 	op = GLAMOBltRop[alu] << 8;
 
-	BEGIN_CMDQ(20);
-	OUT_REG_BO(GLAMO_REG_2D_SRC_ADDRL, priv_src->bo);
-	OUT_REG(GLAMO_REG_2D_SRC_PITCH, src_pitch & 0x7ff);
+	GlamoDRMAddCommandBO(pGlamo, GLAMO_REG_2D_SRC_ADDRL, priv_src->bo);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_SRC_PITCH, src_pitch & 0x7ff);
 
-	OUT_REG_BO(GLAMO_REG_2D_DST_ADDRL, priv_dst->bo);
-	OUT_REG(GLAMO_REG_2D_DST_PITCH, dst_pitch & 0x7ff);
-	OUT_REG(GLAMO_REG_2D_DST_HEIGHT, pDst->drawable.height);
+	GlamoDRMAddCommandBO(pGlamo, GLAMO_REG_2D_DST_ADDRL, priv_dst->bo);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_PITCH, dst_pitch & 0x7ff);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_HEIGHT, pDst->drawable.height);
 
-	OUT_REG(GLAMO_REG_2D_COMMAND2, op);
-	OUT_REG(GLAMO_REG_2D_ID1, 0);
-	OUT_REG(GLAMO_REG_2D_ID2, 0);
-	END_CMDQ();
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_COMMAND2, op);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_ID1, 0);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_ID2, 0);
 
 	return TRUE;
 }
@@ -277,17 +292,14 @@ void GlamoKMSExaCopy(PixmapPtr pDst, int srcX, int srcY, int dstX, int dstY,
 {
 	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
-	RING_LOCALS;
 
-	BEGIN_CMDQ(14);
-	OUT_REG(GLAMO_REG_2D_SRC_X, srcX);
-	OUT_REG(GLAMO_REG_2D_SRC_Y, srcY);
-	OUT_REG(GLAMO_REG_2D_DST_X, dstX);
-	OUT_REG(GLAMO_REG_2D_DST_Y, dstY);
-	OUT_REG(GLAMO_REG_2D_RECT_WIDTH, width);
-	OUT_REG(GLAMO_REG_2D_RECT_HEIGHT, height);
-	OUT_REG(GLAMO_REG_2D_COMMAND3, 0);
-	END_CMDQ();
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_SRC_X, srcX);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_SRC_Y, srcY);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_X, dstX);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_Y, dstY);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_RECT_WIDTH, width);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_RECT_HEIGHT, height);
+	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_COMMAND3, 0);
 }
 
 
@@ -363,9 +375,6 @@ static void *GlamoKMSExaCreatePixmap(ScreenPtr screen, int size, int align)
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *new_priv;
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Creating a new pixmap, size=%i\n",
-			size);
-
 	new_priv = xcalloc(1, sizeof(struct glamo_exa_pixmap_priv));
 	if (!new_priv)
 		return NULL;
@@ -398,8 +407,6 @@ static void GlamoKMSExaDestroyPixmap(ScreenPtr screen, void *driverPriv)
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *driver_priv = driverPriv;
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Destroying a pixmap\n");
-
 	if (driver_priv->bo)
 		pGlamo->bufmgr->funcs->bo_unref(driver_priv->bo);
 	xfree(driver_priv);
@@ -424,8 +431,6 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *driver_priv;
-
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Prepare access\n");
 
 	driver_priv = exaGetPixmapDriverPrivate(pPix);
 	if (!driver_priv) {
@@ -458,8 +463,6 @@ static void GlamoKMSExaFinishAccess(PixmapPtr pPix, int index)
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *driver_priv;
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Finish access\n");
-
 	driver_priv = exaGetPixmapDriverPrivate(pPix);
 	if (!driver_priv) {
 		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
@@ -487,11 +490,6 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *priv;
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "ModifyPixmapHeader. "
-	                                     "%ix%ix%i %ibpp, %i\n",
-	                                     width, height, depth,
-	                                     bitsPerPixel, devKind);
-
 	if (depth <= 0) depth = pPix->drawable.depth;
 	if (bitsPerPixel <= 0) bitsPerPixel = pPix->drawable.bitsPerPixel;
 	if (width <= 0) width = pPix->drawable.width;
@@ -515,8 +513,6 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 		/* This pixmap has no associated buffer object.
 		 * It's time to create one */
 		size = width * height * (depth/8);
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Creating pixmap BO"
-		                                     " (%i bytes)\n", size);
 		priv->bo = pGlamo->bufmgr->funcs->bo_open(pGlamo->bufmgr,
 		                                          0, /* handle */
 		                                          size,
@@ -548,7 +544,6 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	Bool success = FALSE;
 	ExaDriverPtr exa;
-	MemBuf *buf;
 
 	xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 			"EXA hardware acceleration initialising\n");
@@ -594,12 +589,10 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	pGlamo->cmdq_objs = malloc(1024);
 	pGlamo->cmdq_obj_pos = malloc(1024);
 	pGlamo->cmdq_obj_used = 0;
-	pGlamo->ring_len = 4 * 1024;
-	buf = (MemBuf *)xcalloc(1, sizeof(MemBuf) + pGlamo->ring_len);
-	if (!buf) return;
-	buf->size = pGlamo->ring_len;
-	buf->used = 0;
-	pGlamo->cmd_queue = buf;
+	pGlamo->cmdq_drm_used = 0;
+	pGlamo->cmdq_drm_size = 4 * 1024;
+	pGlamo->cmdq_drm = malloc(pGlamo->cmdq_drm_size);
+	if ( !pGlamo->cmdq_drm ) return;
 
 	/* Tell EXA that we're going to take care of memory
 	 * management ourselves. */

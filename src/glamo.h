@@ -106,6 +106,11 @@ typedef struct {
 	 * "at once", when we are happy with it.
 	 */
 	MemBuf *cmd_queue;
+
+	/* The same, when using DRM */
+	uint16_t *cmdq_drm;
+	int cmdq_drm_used;
+	int cmdq_drm_size;
 	int cmdq_obj_used;
 	uint32_t *cmdq_objs;
 	unsigned int *cmdq_obj_pos;
