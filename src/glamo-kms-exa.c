@@ -382,12 +382,8 @@ static void *GlamoKMSExaCreatePixmap(ScreenPtr screen, int size, int align)
 		return new_priv;
 
 	/* Dive into the kernel (via libdrm) to allocate some VRAM */
-	new_priv->bo = pGlamo->bufmgr->funcs->bo_open(pGlamo->bufmgr,
-						      0, /* handle */
-						      size,
-						      align,
-						      GLAMO_GEM_DOMAIN_VRAM,
-						      0 /* flags */	      );
+	new_priv->bo = glamo_bo_open(pGlamo->bufmgr, 0, size, align,
+	                             GLAMO_GEM_DOMAIN_VRAM, 0);
 	if (!new_priv->bo) {
 		xfree(new_priv);
 		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
@@ -401,12 +397,11 @@ static void *GlamoKMSExaCreatePixmap(ScreenPtr screen, int size, int align)
 
 static void GlamoKMSExaDestroyPixmap(ScreenPtr screen, void *driverPriv)
 {
-	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *driver_priv = driverPriv;
 
 	if (driver_priv->bo)
-		pGlamo->bufmgr->funcs->bo_unref(driver_priv->bo);
+		glamo_bo_unref(driver_priv->bo);
+
 	xfree(driver_priv);
 }
 
@@ -427,7 +422,6 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 {
 	ScreenPtr screen = pPix->drawable.pScreen;
 	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *driver_priv;
 
 	driver_priv = exaGetPixmapDriverPrivate(pPix);
@@ -443,7 +437,7 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 		return TRUE;
 	}
 
-	if (pGlamo->bufmgr->funcs->bo_map(driver_priv->bo, 1)) {
+	if ( glamo_bo_map(driver_priv->bo, 1) ) {
 		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 				"%s: bo map failed\n", __FUNCTION__);
 		return FALSE;
@@ -458,7 +452,6 @@ static void GlamoKMSExaFinishAccess(PixmapPtr pPix, int index)
 {
 	ScreenPtr screen = pPix->drawable.pScreen;
 	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
-	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *driver_priv;
 
 	driver_priv = exaGetPixmapDriverPrivate(pPix);
@@ -474,7 +467,7 @@ static void GlamoKMSExaFinishAccess(PixmapPtr pPix, int index)
 		return;
 	}
 
-	pGlamo->bufmgr->funcs->bo_unmap(driver_priv->bo);
+	glamo_bo_unmap(driver_priv->bo);
 	pPix->devPrivate.ptr = NULL;
 }
 
@@ -510,13 +503,13 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 
 		/* This pixmap has no associated buffer object.
 		 * It's time to create one */
-		size = width * height * (depth/8);
-		priv->bo = pGlamo->bufmgr->funcs->bo_open(pGlamo->bufmgr,
-		                                          0, /* handle */
-		                                          size,
-		                                          2,
-		                                          GLAMO_GEM_DOMAIN_VRAM,
-		                                          0 /* flags */       );
+		size = (width * height * depth) / 8;
+		if ( size == 0 ) {
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			           "Zero-sized pixmap in ModifyPixmapHeader\n");
+		}
+		priv->bo = glamo_bo_open(pGlamo->bufmgr, 0, size, 2,
+		                         GLAMO_GEM_DOMAIN_VRAM, 0);
 
 		if ( priv->bo == NULL ) {
 			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
