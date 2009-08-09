@@ -118,32 +118,6 @@ static const CARD8 GLAMOBltRop[16] = {
 };
 
 
-static inline void GlamoDRMAddCommand(GlamoPtr pGlamo, uint16_t reg,
-                                      uint16_t val)
-{
-	/* Record command */
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg;
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = val;
-}
-
-
-static inline void GlamoDRMAddCommandBO(GlamoPtr pGlamo, uint16_t reg,
-                                        struct glamo_bo *bo)
-{
-	/* Record object position */
-	pGlamo->cmdq_objs[pGlamo->cmdq_obj_used] = bo->handle;
-	/* -> bytes */
-	pGlamo->cmdq_obj_pos[pGlamo->cmdq_obj_used] = pGlamo->cmdq_drm_used * 2;
-	pGlamo->cmdq_obj_used++;
-
-	/* Record command */
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg;
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg+2;
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
-}
-
-
 /* Submit the prepared command sequence to the kernel */
 static void GlamoDRMDispatch(GlamoPtr pGlamo)
 {
@@ -166,6 +140,44 @@ static void GlamoDRMDispatch(GlamoPtr pGlamo)
 	/* Reset counts to zero for the next sequence */
 	pGlamo->cmdq_obj_used = 0;
 	pGlamo->cmdq_drm_used = 0;
+}
+
+
+static inline void GlamoDRMAddCommand(GlamoPtr pGlamo, uint16_t reg,
+                                      uint16_t val)
+{
+	if ( pGlamo->cmdq_drm_used == pGlamo->cmdq_drm_size ) {
+		xf86DrvMsg(pGlamo->pScreen->myNum, X_INFO,
+		           "Forced command cache flush.\n");
+		GlamoDRMDispatch(pGlamo);
+	}
+
+	/* Record command */
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg;
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = val;
+}
+
+
+static inline void GlamoDRMAddCommandBO(GlamoPtr pGlamo, uint16_t reg,
+                                        struct glamo_bo *bo)
+{
+	if ( pGlamo->cmdq_drm_used == pGlamo->cmdq_drm_size ) {
+		xf86DrvMsg(pGlamo->pScreen->myNum, X_INFO,
+		           "Forced command cache flush.\n");
+		GlamoDRMDispatch(pGlamo);
+	}
+
+	/* Record object position */
+	pGlamo->cmdq_objs[pGlamo->cmdq_obj_used] = bo->handle;
+	/* -> bytes */
+	pGlamo->cmdq_obj_pos[pGlamo->cmdq_obj_used] = pGlamo->cmdq_drm_used * 2;
+	pGlamo->cmdq_obj_used++;
+
+	/* Record command */
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg;
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg+2;
+	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
 }
 
 
