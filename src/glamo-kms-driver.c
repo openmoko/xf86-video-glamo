@@ -349,8 +349,8 @@ Bool GlamoKMSScreenInit(int scrnIndex, ScreenPtr pScreen, int argc,
 
 	/* Deal with server regeneration */
 	if ( pGlamo->drm_fd < 0 ) {
-	pGlamo->drm_fd = drmOpen(NULL, "platform:glamo-fb");
-	if ( pGlamo->drm_fd < 0 ) return FALSE;
+		pGlamo->drm_fd = drmOpen(NULL, "platform:glamo-fb");
+		if ( pGlamo->drm_fd < 0 ) return FALSE;
 	}
 
 	pScrn->pScreen = pScreen;
