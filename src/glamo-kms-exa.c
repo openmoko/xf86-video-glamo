@@ -357,20 +357,6 @@ void GlamoKMSExaDoneComposite(PixmapPtr pDst)
 }
 
 
-Bool GlamoKMSExaUploadToScreen(PixmapPtr pDst, int x, int y, int w, int h,
-                               char *src, int src_pitch)
-{
-	return FALSE;
-}
-
-
-Bool GlamoKMSExaDownloadFromScreen(PixmapPtr pSrc, int x, int y, int w, int h,
-                                   char *dst, int dst_pitch)
-{
-	return FALSE;
-}
-
-
 void GlamoKMSExaWaitMarker(ScreenPtr pScreen, int marker)
 {
 //	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
@@ -590,8 +576,8 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	exa->Composite = GlamoKMSExaComposite;
 	exa->DoneComposite = GlamoKMSExaDoneComposite;
 
-	exa->DownloadFromScreen = GlamoKMSExaDownloadFromScreen;
-	exa->UploadToScreen = GlamoKMSExaUploadToScreen;
+	exa->DownloadFromScreen = NULL;
+	exa->UploadToScreen = NULL;
 	exa->UploadToScratch = NULL;
 
 //	exa->MarkSync = GlamoKMSExaMarkSync;
