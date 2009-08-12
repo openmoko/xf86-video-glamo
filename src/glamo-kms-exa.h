@@ -22,6 +22,6 @@
 
 #include "xf86.h"
 
-extern void *GlamoKMSExaInit(ScrnInfoPtr pScrn);
+extern void GlamoKMSExaInit(ScrnInfoPtr pScrn);
 extern void GlamoKMSExaClose(ScrnInfoPtr pScrn);
 extern unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags);

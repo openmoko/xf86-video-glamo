@@ -58,6 +58,7 @@
 #include <X11/extensions/dpms.h>
 
 #include "glamo.h"
+#include "glamo-kms-crtc.h"
 
 
 struct crtc_private

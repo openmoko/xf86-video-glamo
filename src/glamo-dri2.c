@@ -58,7 +58,7 @@ typedef struct {
 
 
 static DRI2BufferPtr glamoCreateBuffers(DrawablePtr pDraw,
-					unsigned int *attachments, int count)
+                                        unsigned int *attachments, int count)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
 	DRI2BufferPtr buffers;
@@ -93,10 +93,10 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr pDraw,
 
 			/* Anything else - create a new pixmap */
 			pPixmap = (*pScreen->CreatePixmap)(pScreen,
-							  pDraw->width,
-							  pDraw->height,
-							  pDraw->depth,
-							  0);
+			                                   pDraw->width,
+			                                   pDraw->height,
+			                                   pDraw->depth,
+			                                   0);
 
 		}
 
@@ -117,7 +117,7 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr pDraw,
 
 
 static void glamoDestroyBuffers(DrawablePtr pDraw,
-				DRI2BufferPtr buffers, int count)
+                                DRI2BufferPtr buffers, int count)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
 	int i;
@@ -136,7 +136,7 @@ static void glamoDestroyBuffers(DrawablePtr pDraw,
 
 
 static void glamoCopyRegion(DrawablePtr pDraw, RegionPtr pRegion,
-		   	    DRI2BufferPtr pDestBuffer, DRI2BufferPtr pSrcBuffer)
+                            DRI2BufferPtr pDestBuffer, DRI2BufferPtr pSrcBuffer)
 {
 }
 

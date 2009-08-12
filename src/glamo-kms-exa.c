@@ -54,6 +54,7 @@
 #include "glamo-log.h"
 #include "glamo.h"
 #include "glamo-regs.h"
+#include "glamo-kms-exa.h"
 
 #include <drm/glamo_drm.h>
 #include <drm/glamo_bo.h>
@@ -195,7 +196,7 @@ unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags)
 }
 
 
-Bool GlamoKMSExaPrepareSolid(PixmapPtr pPix, int alu, Pixel pm, Pixel fg)
+static Bool GlamoKMSExaPrepareSolid(PixmapPtr pPix, int alu, Pixel pm, Pixel fg)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
@@ -228,7 +229,7 @@ Bool GlamoKMSExaPrepareSolid(PixmapPtr pPix, int alu, Pixel pm, Pixel fg)
 }
 
 
-void GlamoKMSExaSolid(PixmapPtr pPix, int x1, int y1, int x2, int y2)
+static void GlamoKMSExaSolid(PixmapPtr pPix, int x1, int y1, int x2, int y2)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
@@ -241,7 +242,7 @@ void GlamoKMSExaSolid(PixmapPtr pPix, int x1, int y1, int x2, int y2)
 }
 
 
-void GlamoKMSExaDoneSolid(PixmapPtr pPix)
+static void GlamoKMSExaDoneSolid(PixmapPtr pPix)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pPix->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
@@ -251,8 +252,8 @@ void GlamoKMSExaDoneSolid(PixmapPtr pPix)
 }
 
 
-Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int dy,
-                            int alu, Pixel pm)
+static Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int dy,
+                                   int alu, Pixel pm)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
@@ -299,8 +300,8 @@ Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int dy,
 }
 
 
-void GlamoKMSExaCopy(PixmapPtr pDst, int srcX, int srcY, int dstX, int dstY,
-                     int width, int height)
+static void GlamoKMSExaCopy(PixmapPtr pDst, int srcX, int srcY,
+                            int dstX, int dstY, int width, int height)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
@@ -315,7 +316,7 @@ void GlamoKMSExaCopy(PixmapPtr pDst, int srcX, int srcY, int dstX, int dstY,
 }
 
 
-void GlamoKMSExaDoneCopy(PixmapPtr pDst)
+static void GlamoKMSExaDoneCopy(PixmapPtr pDst)
 {
 	ScrnInfoPtr pScrn = xf86Screens[pDst->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
@@ -325,39 +326,13 @@ void GlamoKMSExaDoneCopy(PixmapPtr pDst)
 }
 
 
-Bool GlamoKMSExaCheckComposite(int op,
-		       PicturePtr   pSrcPicture,
-		       PicturePtr   pMaskPicture,
-		       PicturePtr   pDstPicture)
+static int GlamoKMSExaMarkSync(ScreenPtr pScreen)
 {
-	return FALSE;
+	return 1;
 }
 
 
-Bool GlamoKMSExaPrepareComposite(int op, PicturePtr pSrcPicture,
-                                 PicturePtr pMaskPicture,
-                                 PicturePtr pDstPicture,
-                                 PixmapPtr pSrc,
-                                 PixmapPtr pMask,
-                                 PixmapPtr pDst)
-{
-	return FALSE;
-}
-
-
-void GlamoKMSExaComposite(PixmapPtr pDst, int srcX, int srcY,
-                          int maskX, int maskY, int dstX, int dstY,
-                          int width, int height)
-{
-}
-
-
-void GlamoKMSExaDoneComposite(PixmapPtr pDst)
-{
-}
-
-
-void GlamoKMSExaWaitMarker(ScreenPtr pScreen, int marker)
+static void GlamoKMSExaWaitMarker(ScreenPtr pScreen, int marker)
 {
 //	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 //	GlamoPtr pGlamo = GlamoPTR(pScrn);
@@ -564,16 +539,16 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	exa->DoneCopy = GlamoKMSExaDoneCopy;
 
 	/* Composite (though these just cause fallback) */
-	exa->CheckComposite = GlamoKMSExaCheckComposite;
-	exa->PrepareComposite = GlamoKMSExaPrepareComposite;
-	exa->Composite = GlamoKMSExaComposite;
-	exa->DoneComposite = GlamoKMSExaDoneComposite;
+	exa->CheckComposite = NULL;//GlamoKMSExaCheckComposite;
+	exa->PrepareComposite = NULL;//GlamoKMSExaPrepareComposite;
+	exa->Composite = NULL;//GlamoKMSExaComposite;
+	exa->DoneComposite = NULL;//GlamoKMSExaDoneComposite;
 
 	exa->DownloadFromScreen = NULL;
 	exa->UploadToScreen = NULL;
 	exa->UploadToScratch = NULL;
 
-//	exa->MarkSync = GlamoKMSExaMarkSync;
+	exa->MarkSync = GlamoKMSExaMarkSync;
 	exa->WaitMarker = GlamoKMSExaWaitMarker;
 
 	/* Prepare temporary buffers */

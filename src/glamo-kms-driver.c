@@ -72,6 +72,7 @@
 #include "glamo-kms-exa.h"
 #include "glamo-dri2.h"
 #include "glamo-kms-crtc.h"
+#include "glamo-kms-output.h"
 
 
 static const char *fbSymbols[] = {
@@ -489,7 +490,7 @@ void GlamoKMSLeaveVT(int scrnIndex, int flags)
 
 
 ModeStatus GlamoKMSValidMode(int scrnIndex, DisplayModePtr mode, Bool verbose,
-                     int flags)
+                             int flags)
 {
 	return MODE_OK;
 }

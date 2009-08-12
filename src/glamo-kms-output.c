@@ -57,6 +57,7 @@
 #include <xf86drmMode.h>
 
 #include "glamo.h"
+#include "glamo-kms-output.h"
 
 
 static char *connector_enum_list[] = {

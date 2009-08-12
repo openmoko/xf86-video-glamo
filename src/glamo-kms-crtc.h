@@ -22,9 +22,4 @@
 
 #include "xf86.h"
 
-/* crtc.c */
 extern void crtc_init(ScrnInfoPtr pScrn);
-
-
-/* output.c */
-extern void output_init(ScrnInfoPtr pScrn);
