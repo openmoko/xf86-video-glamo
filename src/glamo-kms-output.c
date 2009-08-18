@@ -120,9 +120,6 @@ static void mode_set(xf86OutputPtr output, DisplayModePtr mode,
 static void commit(xf86OutputPtr output)
 {
 	dpms(output, DPMSModeOn);
-
-	if (output->scrn->pScreen != NULL)
-		xf86_reload_cursors(output->scrn->pScreen);
 }
 
 
