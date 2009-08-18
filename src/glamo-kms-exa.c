@@ -455,6 +455,7 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *priv;
+	int new_size;
 
 	if (depth <= 0) depth = pPix->drawable.depth;
 	if (bitsPerPixel <= 0) bitsPerPixel = pPix->drawable.bitsPerPixel;
@@ -472,26 +473,44 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 		return FALSE;
 	}
 
-	if ( priv->bo == NULL ) {
+	new_size = (width * height * depth) / 8;
+	if ( new_size == 0 ) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+		           "Zero-sized pixmap in ModifyPixmapHeader\n");
+		return FALSE;
+	}
 
-		int size;
+	if ( priv->bo == NULL ) {
 
 		/* This pixmap has no associated buffer object.
 		 * It's time to create one */
-		size = (width * height * depth) / 8;
-		if ( size == 0 ) {
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			           "Zero-sized pixmap in ModifyPixmapHeader\n");
-		}
-		priv->bo = glamo_bo_open(pGlamo->bufmgr, 0, size, 2,
+		priv->bo = glamo_bo_open(pGlamo->bufmgr, 0, new_size, 2,
 		                         GLAMO_GEM_DOMAIN_VRAM, 0);
-
 		if ( priv->bo == NULL ) {
 			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 				   "Failed to create buffer object"
 				   " in ModifyPixmapHeader.\n");
 			return FALSE;
 		}
+
+	} else {
+
+		if ( priv->bo->size < new_size ) {
+
+			/* Get rid of the old GEM object */
+			glamo_bo_unref(priv->bo);
+
+			/* Create a new one of the correct size */
+			priv->bo = glamo_bo_open(pGlamo->bufmgr, 0, new_size, 2,
+				                 GLAMO_GEM_DOMAIN_VRAM, 0);
+			if ( priv->bo == NULL ) {
+				xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+					   "Failed to reallocate buffer object"
+					   " in ModifyPixmapHeader.\n");
+				return FALSE;
+			}
+
+		} /* else, reallocation is not required */
 
 	}
 
