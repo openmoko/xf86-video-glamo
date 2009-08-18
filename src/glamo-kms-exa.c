@@ -476,8 +476,10 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 	new_size = (width * height * depth) / 8;
 	if ( new_size == 0 ) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-		           "Zero-sized pixmap in ModifyPixmapHeader\n");
-		return FALSE;
+		           "Zero-sized pixmap in ModifyPixmapHeader"
+		           " %ix%i %i bpp depth=%i\n", width, height,
+		           bitsPerPixel, depth);
+		new_size = 1;
 	}
 
 	if ( priv->bo == NULL ) {
