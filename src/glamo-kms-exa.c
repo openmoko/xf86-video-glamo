@@ -179,6 +179,8 @@ static inline void GlamoDRMAddCommandBO(GlamoPtr pGlamo, uint16_t reg,
 	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
 	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg+2;
 	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
+
+	pGlamo->last_buffer_object = bo;
 }
 
 
@@ -222,8 +224,6 @@ static Bool GlamoKMSExaPrepareSolid(PixmapPtr pPix, int alu, Pixel pm, Pixel fg)
 	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_HEIGHT, pPix->drawable.height);
 	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_PAT_FG, fg);
 	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_COMMAND2, op);
-	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_ID1, 0);
-	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_ID2, 0);
 
 	return TRUE;
 }
@@ -293,8 +293,6 @@ static Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int d
 	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_DST_HEIGHT, pDst->drawable.height);
 
 	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_COMMAND2, op);
-	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_ID1, 0);
-	GlamoDRMAddCommand(pGlamo, GLAMO_REG_2D_ID2, 0);
 
 	return TRUE;
 }
@@ -326,19 +324,45 @@ static void GlamoKMSExaDoneCopy(PixmapPtr pDst)
 }
 
 
+/* Generate an integer token which can be used for synchronisation later.
+ * We do this by putting the most recently used buffer object into a list,
+ * and returning the index into that list.
+ * To make things a little more exciting, the list is a ring buffer. */
 static int GlamoKMSExaMarkSync(ScreenPtr pScreen)
 {
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	unsigned int idx;
+
+	idx = pGlamo->exa_marker_index;
+	pGlamo->exa_buffer_markers[idx] = pGlamo->last_buffer_object;
+
+	pGlamo->exa_marker_index = (idx+1) % NUM_EXA_BUFFER_MARKERS;
+
 	return 1;
 }
 
 
-static void GlamoKMSExaWaitMarker(ScreenPtr pScreen, int marker)
+static void GlamoKMSExaWaitMarker(ScreenPtr pScreen, int idx)
 {
-//	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-//	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
+	struct glamo_bo *bo;
 
-//	GLAMOEngineWait(pGlamo, GLAMO_ENGINE_ALL);
-	// FIXME
+	bo = pGlamo->exa_buffer_markers[idx];
+
+	if ( bo ) {
+		glamo_bo_wait(bo);
+	} else {
+
+		struct drm_glamo_gem_wait_rendering args;
+
+		args.handle = 0;
+		args.have_handle = 0;
+		drmCommandWriteRead(pGlamo->bufmgr->fd,
+				    DRM_GLAMO_GEM_WAIT_RENDERING,
+				    &args, sizeof(args));
+	}
 }
 
 
@@ -370,9 +394,23 @@ static void *GlamoKMSExaCreatePixmap(ScreenPtr screen, int size, int align)
 }
 
 
-static void GlamoKMSExaDestroyPixmap(ScreenPtr screen, void *driverPriv)
+static void GlamoKMSExaDestroyPixmap(ScreenPtr pScreen, void *driverPriv)
 {
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *driver_priv = driverPriv;
+	int i;
+
+	/* We're about to (probably) delete a buffer object, so zip through
+	 * the list of EXA wait markers and delete any references. */
+	for ( i=0; i<NUM_EXA_BUFFER_MARKERS; i++ ) {
+		if ( pGlamo->exa_buffer_markers[i] == driver_priv->bo ) {
+			pGlamo->exa_buffer_markers[i] = NULL;
+		}
+	}
+	if ( pGlamo->last_buffer_object == driver_priv->bo ) {
+		pGlamo->last_buffer_object = NULL;
+	}
 
 	if (driver_priv->bo)
 		glamo_bo_unref(driver_priv->bo);
@@ -531,6 +569,7 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	Bool success = FALSE;
 	ExaDriverPtr exa;
+	int i;
 
 	xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 			"EXA hardware acceleration initialising\n");
@@ -579,11 +618,20 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	pGlamo->cmdq_drm_used = 0;
 	pGlamo->cmdq_drm_size = 4 * 1024;
 	pGlamo->cmdq_drm = malloc(pGlamo->cmdq_drm_size);
+	pGlamo->last_buffer_object = NULL;
+	for ( i=0; i<NUM_EXA_BUFFER_MARKERS; i++ ) {
+		pGlamo->exa_buffer_markers[i] = NULL;
+	}
+	pGlamo->exa_marker_index = 0;
 	if ( !pGlamo->cmdq_drm ) return;
 
 	/* Tell EXA that we're going to take care of memory
 	 * management ourselves. */
 	exa->flags = EXA_OFFSCREEN_PIXMAPS | EXA_HANDLES_PIXMAPS;
+#ifdef EXA_MIXED_PIXMAPS
+	exa->flags |= EXA_MIXED_PIXMAPS;
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using mixed mode pixmaps\n");
+#endif
 	exa->PrepareAccess = GlamoKMSExaPrepareAccess;
 	exa->FinishAccess = GlamoKMSExaFinishAccess;
 	exa->CreatePixmap = GlamoKMSExaCreatePixmap;

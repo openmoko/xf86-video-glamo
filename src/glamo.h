@@ -75,6 +75,9 @@ MMIO_IN16(__volatile__ void *base, const unsigned long offset)
 
 #endif
 
+/* The number of EXA wait markers which can be active at once */
+#define NUM_EXA_BUFFER_MARKERS 32
+
 typedef volatile CARD16        VOL16;
 
 typedef struct _MemBuf {
@@ -114,6 +117,10 @@ typedef struct {
 	int cmdq_obj_used;
 	uint32_t *cmdq_objs;
 	unsigned int *cmdq_obj_pos;
+	struct glamo_bo *last_buffer_object;  /* The last buffer object
+	                                       * referenced in the cmdq */
+	struct glamo_bo *exa_buffer_markers[NUM_EXA_BUFFER_MARKERS];
+	unsigned int exa_marker_index;  /* Index into exa_buffer_markers */
 
 	/* What was GLAMOCardInfo */
 	volatile char *reg_base;
