@@ -57,8 +57,20 @@ typedef struct {
 } GlamoDRI2BufferPrivateRec, *GlamoDRI2BufferPrivatePtr;
 
 
-static DRI2BufferPtr glamoCreateBuffers(DrawablePtr pDraw,
-                                        unsigned int *attachments, int count)
+#ifdef USE_DRI2_1_1_0
+
+static DRI2BufferPtr glamoCreateBuffer(DrawablePtr pDraw,
+                                       unsigned int attachment,
+                                       unsigned int format)
+{
+	DRI2BufferPtr buffer;
+	return buffer;
+}
+
+#else
+
+static DRI2BufferPtr glamoCreateBuffer(DrawablePtr pDraw,
+                                       unsigned int *attachments, int count)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
 	DRI2BufferPtr buffers;
@@ -115,6 +127,26 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr pDraw,
 	return buffers;
 }
 
+#endif
+
+#ifdef USE_DRI2_1_1_0
+
+static void glamoDestroyBuffer(DrawablePtr pDraw,
+                               DRI2BufferPtr buffer)
+{
+	ScreenPtr pScreen = pDraw->pScreen;
+	int i;
+	GlamoDRI2BufferPrivatePtr private;
+
+	private = buffer.driverPrivate;
+	(*pScreen->DestroyPixmap)(private->pPixmap);
+
+	if ( buffer ) {
+		xfree(buffer.driverPrivate);
+	}
+}
+
+#else
 
 static void glamoDestroyBuffers(DrawablePtr pDraw,
                                 DRI2BufferPtr buffers, int count)
@@ -133,6 +165,8 @@ static void glamoDestroyBuffers(DrawablePtr pDraw,
 		xfree(buffers);
 	}
 }
+
+#endif
 
 
 static void glamoCopyRegion(DrawablePtr pDraw, RegionPtr pRegion,
@@ -171,8 +205,13 @@ void driScreenInit(ScreenPtr pScreen)
 	dri2info.deviceName = p;
 	dri2info.driverName = "glamo";
 
+#ifdef USE_DRI2_1_1_0
+	dri2info.CreateBuffer = glamoCreateBuffer;
+	dri2info.DestroyBuffer = glamoDestroyBuffer;
+#else
 	dri2info.CreateBuffers = glamoCreateBuffers;
 	dri2info.DestroyBuffers = glamoDestroyBuffers;
+#endif
 	dri2info.CopyRegion = glamoCopyRegion;
 
 	if ( !DRI2ScreenInit(pScreen, &dri2info) ) return;
