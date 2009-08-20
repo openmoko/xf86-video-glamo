@@ -70,7 +70,7 @@ XORG_DRIVER_CHECK_EXT(XV, videoproto)
 
 # Checks for pkg-config packages
 PKG_CHECK_MODULES(XORG, [xorg-server >= 1.0.99.901 xproto fontsproto $REQUIRED_MODULES])
-sdkdir=$(pkg-config --variable=sdkdir xorg-server)
+sdkdir=$($PKG_CONFIG --variable=sdkdir xorg-server)
 
 if test "x$JBT6K74_SET_STATE" = xyes; then
     AC_DEFINE(JBT6K74_SET_STATE, 1, [Set jbt6k74 state when changing resolution])
