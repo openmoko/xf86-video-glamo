@@ -75,13 +75,6 @@
 #include "glamo-kms-output.h"
 
 
-static const char *fbSymbols[] = {
-    "fbPictureInit",
-    "fbScreenInit",
-    NULL
-};
-
-
 /* Return TRUE if KMS can be used */
 Bool GlamoKernelModesettingAvailable()
 {
@@ -208,7 +201,6 @@ Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags)
 	pGlamo->drm_fd = drmOpen(NULL, "platform:glamo-fb");
 	if ( pGlamo->drm_fd < 0 ) return FALSE;
 
-	pScrn->racMemFlags = RAC_FB | RAC_COLORMAP;
 	pScrn->monitor = pScrn->confScreen->monitor;
 	pScrn->progClock = TRUE;
 	pScrn->rgbBits = 8;
@@ -262,7 +254,6 @@ Bool GlamoKMSPreInit(ScrnInfoPtr pScrn, int flags)
 
 	/* Load the required sub modules */
 	if (!xf86LoadSubModule(pScrn, "fb")) return FALSE;
-	xf86LoaderReqSymLists(fbSymbols, NULL);
 	xf86LoadSubModule(pScrn, "exa");
 	xf86LoadSubModule(pScrn, "dri2");
 

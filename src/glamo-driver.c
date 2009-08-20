@@ -23,7 +23,6 @@
 /* for visuals */
 #include "fb.h"
 
-#include "xf86Resources.h"
 #include "xf86RAC.h"
 
 #include "fbdevhw.h"
@@ -424,10 +423,6 @@ GlamoPreInit(ScrnInfoPtr pScrn, int flags)
     pGlamo->accel = FALSE;
 
     pGlamo->pEnt = xf86GetEntityInfo(pScrn->entityList[0]);
-
-    pScrn->racMemFlags = RAC_FB | RAC_CURSOR | RAC_VIEWPORT;
-    /* XXX Is this right?  Can probably remove RAC_FB */
-    pScrn->racIoFlags = RAC_FB | RAC_CURSOR | RAC_VIEWPORT;
 
     fb_device = xf86FindOptionValue(pGlamo->pEnt->device->options, "Device");
 
