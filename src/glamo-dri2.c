@@ -69,8 +69,8 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr pDraw,
 
 #else
 
-static DRI2BufferPtr glamoCreateBuffer(DrawablePtr pDraw,
-                                       unsigned int *attachments, int count)
+static DRI2BufferPtr glamoCreateBuffers(DrawablePtr pDraw,
+                                        unsigned int *attachments, int count)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
 	DRI2BufferPtr buffers;
