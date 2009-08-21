@@ -57,7 +57,7 @@ typedef struct {
 } GlamoDRI2BufferPrivateRec, *GlamoDRI2BufferPrivatePtr;
 
 
-#ifdef USE_DRI2_1_1_0
+#if DRI2INFOREC_VERSION >= 3
 
 static DRI2BufferPtr glamoCreateBuffer(DrawablePtr pDraw,
                                        unsigned int attachment,
@@ -129,20 +129,19 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr pDraw,
 
 #endif
 
-#ifdef USE_DRI2_1_1_0
+#if DRI2INFOREC_VERSION >= 3
 
 static void glamoDestroyBuffer(DrawablePtr pDraw,
                                DRI2BufferPtr buffer)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	int i;
 	GlamoDRI2BufferPrivatePtr private;
 
-	private = buffer.driverPrivate;
+	private = buffer->driverPrivate;
 	(*pScreen->DestroyPixmap)(private->pPixmap);
 
 	if ( buffer ) {
-		xfree(buffer.driverPrivate);
+		xfree(buffer->driverPrivate);
 	}
 }
 
@@ -205,7 +204,7 @@ void driScreenInit(ScreenPtr pScreen)
 	dri2info.deviceName = p;
 	dri2info.driverName = "glamo";
 
-#ifdef USE_DRI2_1_1_0
+#if DRI2INFOREC_VERSION >= 3
 	dri2info.CreateBuffer = glamoCreateBuffer;
 	dri2info.DestroyBuffer = glamoDestroyBuffer;
 #else
