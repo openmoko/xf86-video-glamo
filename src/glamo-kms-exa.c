@@ -450,6 +450,12 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 		return TRUE;
 	}
 
+	/* Return as quickly as possible if we have a mapping already */
+	if ( driver_priv->bo->virtual ) {
+		pPix->devPrivate.ptr = driver_priv->bo->virtual;
+		return TRUE;
+	}
+
 	if ( glamo_bo_map(driver_priv->bo, 1) ) {
 		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 				"%s: bo map failed\n", __FUNCTION__);
@@ -463,24 +469,7 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 
 static void GlamoKMSExaFinishAccess(PixmapPtr pPix, int index)
 {
-	ScreenPtr screen = pPix->drawable.pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
-	struct glamo_exa_pixmap_priv *driver_priv;
-
-	driver_priv = exaGetPixmapDriverPrivate(pPix);
-	if (!driver_priv) {
-		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-				"%s: no driver private?\n", __FUNCTION__);
-		return;
-	}
-
-	if (!driver_priv->bo) {
-		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-				"%s: no buffer object?\n", __FUNCTION__);
-		return;
-	}
-
-	glamo_bo_unmap(driver_priv->bo);
+	/* Leave the mapping intact for fast restoration of access later */
 	pPix->devPrivate.ptr = NULL;
 }
 
