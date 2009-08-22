@@ -87,6 +87,7 @@ Bool GlamoKernelModesettingAvailable()
 	do {
 
 		ent = readdir(dir);
+		if ( !ent ) return FALSE;
 
 		if ( strncmp(ent->d_name, "drm:controlD", 12) == 0 ) {
 			closedir(dir);
