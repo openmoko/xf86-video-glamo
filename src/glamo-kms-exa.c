@@ -258,7 +258,6 @@ static Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int d
 	ScrnInfoPtr pScrn = xf86Screens[pSrc->drawable.pScreen->myNum];
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	FbBits mask;
-	CARD32 src_offset, dst_offset;
 	CARD16 src_pitch, dst_pitch;
 	CARD16 op;
 	struct glamo_exa_pixmap_priv *priv_src;
@@ -277,12 +276,8 @@ static Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int d
 				(unsigned int) pm));
 	}
 
-	src_offset = exaGetPixmapOffset(pSrc);
 	src_pitch = pSrc->devKind;
-
-	dst_offset = exaGetPixmapOffset(pDst);
 	dst_pitch = pDst->devKind;
-
 	op = GLAMOBltRop[alu] << 8;
 
 	GlamoDRMAddCommandBO(pGlamo, GLAMO_REG_2D_SRC_ADDRL, priv_src->bo);
