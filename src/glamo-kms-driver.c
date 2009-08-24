@@ -63,7 +63,6 @@
 #include "xf86.h"
 #include "xf86Crtc.h"
 #include "xf86str.h"
-#include "xf86RAC.h"
 #include "xf86drm.h"
 #include "micmap.h"
 

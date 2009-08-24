@@ -23,8 +23,6 @@
 /* for visuals */
 #include "fb.h"
 
-#include "xf86RAC.h"
-
 #include "fbdevhw.h"
 
 #include "xf86xv.h"

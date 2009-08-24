@@ -52,7 +52,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #define DPMS_SERVER
-#include <X11/extensions/dpms.h>
+#include <X11/extensions/dpmsconst.h>
 #include <X11/Xatom.h>
 #include <xf86drmMode.h>
 

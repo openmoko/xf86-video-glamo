@@ -38,7 +38,7 @@
 #include <unistd.h>
 
 #define DPMS_SERVER
-#include <X11/extensions/dpms.h>
+#include <X11/extensions/dpmsconst.h>
 
 #include "glamo.h"
 #include "glamo-regs.h"
