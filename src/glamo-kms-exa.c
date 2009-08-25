@@ -538,7 +538,46 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 
 	}
 
+	return TRUE;
+}
+
+
+Bool GlamoKMSExaCheckComposite(int op,
+                               PicturePtr pSrcPicture,
+                               PicturePtr pMaskPicture,
+                               PicturePtr pDstPicture)
+{
 	return FALSE;
+}
+
+
+Bool GlamoKMSExaPrepareComposite(int op,
+                                 PicturePtr pSrcPicture,
+                                 PicturePtr pMaskPicture,
+                                 PicturePtr pDstPicture,
+                                 PixmapPtr pSrc,
+                                 PixmapPtr pMask,
+                                 PixmapPtr pDst)
+{
+	return FALSE;
+}
+
+
+void GlamoKMSExaComposite(PixmapPtr pDst,
+                          int srcX,
+                          int srcY,
+                          int maskX,
+                          int maskY,
+                          int dstX,
+                          int dstY,
+                          int width,
+                          int height)
+{
+}
+
+
+void GlamoKMSExaDoneComposite(PixmapPtr pDst)
+{
 }
 
 
@@ -583,10 +622,10 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	exa->DoneCopy = GlamoKMSExaDoneCopy;
 
 	/* Composite (though these just cause fallback) */
-	exa->CheckComposite = NULL;//GlamoKMSExaCheckComposite;
-	exa->PrepareComposite = NULL;//GlamoKMSExaPrepareComposite;
-	exa->Composite = NULL;//GlamoKMSExaComposite;
-	exa->DoneComposite = NULL;//GlamoKMSExaDoneComposite;
+	exa->CheckComposite = GlamoKMSExaCheckComposite;
+	exa->PrepareComposite = GlamoKMSExaPrepareComposite;
+	exa->Composite = GlamoKMSExaComposite;
+	exa->DoneComposite = GlamoKMSExaDoneComposite;
 
 	exa->DownloadFromScreen = NULL;
 	exa->UploadToScreen = NULL;
