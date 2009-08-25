@@ -448,6 +448,7 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 	/* Return as quickly as possible if we have a mapping already */
 	if ( driver_priv->bo->virtual ) {
 		pPix->devPrivate.ptr = driver_priv->bo->virtual;
+		glamo_bo_wait(driver_priv->bo);
 		return TRUE;
 	}
 
@@ -457,6 +458,7 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 		return FALSE;
 	}
 	pPix->devPrivate.ptr = driver_priv->bo->virtual;
+	glamo_bo_wait(driver_priv->bo);
 
 	return TRUE;
 }
