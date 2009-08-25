@@ -596,8 +596,8 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	ExaDriverPtr exa;
 	int i;
 
-	xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-			"EXA hardware acceleration initialising\n");
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+	           "EXA hardware acceleration initialising\n");
 
 	exa = exaDriverAlloc();
 	if ( !exa ) return;
