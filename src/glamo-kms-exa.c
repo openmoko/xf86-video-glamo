@@ -471,9 +471,10 @@ static void GlamoKMSExaFinishAccess(PixmapPtr pPix, int index)
 }
 
 
-static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
-                                          int depth, int bitsPerPixel,
-                                          int devKind, pointer pPixData)
+/* This essentially does the job of ModifyPixmapHeader, for the occasions
+ * when we need to update the properties of the screen pixmap. */
+Bool GlamoKMSExaMakeFullyFledged(PixmapPtr pPix, int width, int height,
+                                 int depth, int bitsPerPixel, int devKind)
 {
 	ScreenPtr screen = pPix->drawable.pScreen;
 	ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
@@ -493,14 +494,14 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 	priv = exaGetPixmapDriverPrivate(pPix);
 	if (!priv) {
 		/* This should never, ever, happen */
-		FatalError("NO PIXMAP PRIVATE\n");
+		FatalError("Fledgeling pixmap had no driver private!\n");
 		return FALSE;
 	}
 
 	new_size = (width * height * depth) / 8;
 	if ( new_size == 0 ) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-		           "Zero-sized pixmap in ModifyPixmapHeader"
+		           "Fledgeling pixmap would still have zero size!"
 		           " %ix%i %i bpp depth=%i\n", width, height,
 		           bitsPerPixel, depth);
 		new_size = 1;
@@ -514,29 +515,15 @@ static Bool GlamoKMSExaModifyPixmapHeader(PixmapPtr pPix, int width, int height,
 		                         GLAMO_GEM_DOMAIN_VRAM, 0);
 		if ( priv->bo == NULL ) {
 			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-				   "Failed to create buffer object"
-				   " in ModifyPixmapHeader.\n");
+				   "Couldn't create buffer object for"
+				   " fledgeling pixmap!\n");
 			return FALSE;
 		}
 
 	} else {
 
-		if ( priv->bo->size < new_size ) {
-
-			/* Get rid of the old GEM object */
-			glamo_bo_unref(priv->bo);
-
-			/* Create a new one of the correct size */
-			priv->bo = glamo_bo_open(pGlamo->bufmgr, 0, new_size, 2,
-				                 GLAMO_GEM_DOMAIN_VRAM, 0);
-			if ( priv->bo == NULL ) {
-				xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-					   "Failed to reallocate buffer object"
-					   " in ModifyPixmapHeader.\n");
-				return FALSE;
-			}
-
-		} /* else, reallocation is not required */
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+		           "Fledgeling pixmap already had a buffer object!\n");
 
 	}
 
@@ -662,7 +649,7 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	exa->CreatePixmap = GlamoKMSExaCreatePixmap;
 	exa->DestroyPixmap = GlamoKMSExaDestroyPixmap;
 	exa->PixmapIsOffscreen = GlamoKMSExaPixmapIsOffscreen;
-	exa->ModifyPixmapHeader = GlamoKMSExaModifyPixmapHeader;
+	exa->ModifyPixmapHeader = NULL;
 
 	/* Hook up with libdrm */
 	pGlamo->bufmgr = glamo_bo_manager_gem_ctor(pGlamo->drm_fd);

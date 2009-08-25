@@ -25,3 +25,6 @@
 extern void GlamoKMSExaInit(ScrnInfoPtr pScrn);
 extern void GlamoKMSExaClose(ScrnInfoPtr pScrn);
 extern unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags);
+extern Bool GlamoKMSExaMakeFullyFledged(PixmapPtr pPix, int width, int height,
+                                        int depth, int bitsPerPixel,
+                                        int devKind);

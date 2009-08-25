@@ -125,11 +125,10 @@ static Bool CreateFrontBuffer(ScrnInfoPtr pScrn)
 	PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
 	unsigned int flags;
 
-	pScreen->ModifyPixmapHeader(rootPixmap,
+	GlamoKMSExaMakeFullyFledged(rootPixmap,
 	                            pScrn->virtualX, pScrn->virtualY,
 	                            pScrn->depth, pScrn->bitsPerPixel,
-	                            pScrn->displayWidth * pScrn->bitsPerPixel/8,
-	                            NULL);
+	                            pScrn->displayWidth*pScrn->bitsPerPixel/8);
 
 	drmModeAddFB(pGlamo->drm_fd,
 	             pScrn->virtualX,
@@ -300,7 +299,7 @@ static Bool GlamoKMSCreateScreenResources(ScreenPtr pScreen)
 
 	rootPixmap = pScreen->GetScreenPixmap(pScreen);
 
-	if (!pScreen->ModifyPixmapHeader(rootPixmap, -1, -1, -1, -1, -1, NULL))
+	if (!GlamoKMSExaMakeFullyFledged(rootPixmap, -1, -1, -1, -1, -1))
 		FatalError("Couldn't adjust screen pixmap\n");
 
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Adding framebuffer....!\n");
