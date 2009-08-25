@@ -199,7 +199,7 @@ void driScreenInit(ScreenPtr pScreen)
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 		   "[glamo-dri] Name of DRM device is '%s'\n", p);
 
-	dri2info.version = 1;
+	dri2info.version = DRI2INFOREC_VERSION;
 	dri2info.fd = pGlamo->drm_fd;
 	dri2info.deviceName = p;
 	dri2info.driverName = "glamo";
@@ -213,7 +213,13 @@ void driScreenInit(ScreenPtr pScreen)
 #endif
 	dri2info.CopyRegion = glamoCopyRegion;
 
-	if ( !DRI2ScreenInit(pScreen, &dri2info) ) return;
+	if ( !DRI2ScreenInit(pScreen, &dri2info) ) {
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		           "[glamo-dri] DRI2 initialisation failed\n");
+	} else {
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		           "[glamo-dri] DRI2 initialisation succeeded\n");
+	}
 }
 
 
