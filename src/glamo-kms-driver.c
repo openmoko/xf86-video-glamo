@@ -302,14 +302,10 @@ static Bool GlamoKMSCreateScreenResources(ScreenPtr pScreen)
 	if (!GlamoKMSExaMakeFullyFledged(rootPixmap, -1, -1, -1, -1, -1))
 		FatalError("Couldn't adjust screen pixmap\n");
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Adding framebuffer....!\n");
-
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%i %i %i %i %i %i\n",
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Adding FB: %i %i %i %i %i %i\n",
 	           pGlamo->drm_fd, pScrn->virtualX, pScrn->virtualY,
 	           pScrn->depth, pScrn->bitsPerPixel,
 	           pScrn->displayWidth * pScrn->bitsPerPixel / 8);
-
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "rootPixmap = %p\n", (void *)rootPixmap);
 
 	drmModeAddFB(pGlamo->drm_fd,
 	             pScrn->virtualX,
@@ -319,13 +315,9 @@ static Bool GlamoKMSCreateScreenResources(ScreenPtr pScreen)
 	             pScrn->displayWidth * pScrn->bitsPerPixel / 8,
 	             driGetPixmapHandle(rootPixmap, &flags), &pGlamo->fb_id);
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Done\n");
-
 	GlamoKMSAdjustFrame(pScrn->scrnIndex,
 	                    pScrn->frameX0, pScrn->frameY0,
 	                    0);
-
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Finished\n");
 
 	return ret;
 }
