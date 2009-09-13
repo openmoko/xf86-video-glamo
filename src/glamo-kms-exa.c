@@ -74,11 +74,6 @@
 #endif
 
 
-struct glamo_exa_pixmap_priv {
-	struct glamo_bo *bo;
-};
-
-
 static const CARD8 GLAMOSolidRop[16] = {
     /* GXclear      */      0x00,         /* 0 */
     /* GXand        */      0xa0,         /* src AND dst */

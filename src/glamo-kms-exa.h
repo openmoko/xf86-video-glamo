@@ -22,6 +22,10 @@
 
 #include "xf86.h"
 
+struct glamo_exa_pixmap_priv {
+	struct glamo_bo *bo;
+};
+
 extern void GlamoKMSExaInit(ScrnInfoPtr pScrn);
 extern void GlamoKMSExaClose(ScrnInfoPtr pScrn);
 extern unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags);
