@@ -114,8 +114,6 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
 	}
 
 	if ( attachment == DRI2BufferFrontLeft ) {
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-		           "Front left buffer\n");
 		if ( drawable->type == DRAWABLE_PIXMAP ) {
 			pixmap = (PixmapPtr)drawable;
 		} else {
@@ -123,8 +121,6 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
 		}
 		pixmap->refcnt++;
 	} else {
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-		           "Attachment type %i\n", attachment);
 		pixmap = pScreen->CreatePixmap(pScreen,
 		                           drawable->width,
 		                           drawable->height,
@@ -277,34 +273,15 @@ static void glamoCopyRegion(DrawablePtr drawable, RegionPtr region,
 	struct glamo_dri2_buffer_priv *src_private;
 	struct glamo_dri2_buffer_priv *dst_private;
 	ScreenPtr pScreen = drawable->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	PixmapPtr src_pixmap;
 	PixmapPtr dst_pixmap;
 	RegionPtr copy_clip;
 	GCPtr gc;
-	char *s, *d;
 
 	src_private = src_buffer->driverPrivate;
 	dst_private = dst_buffer->driverPrivate;
 	src_pixmap = src_private->pixmap;
 	dst_pixmap = dst_private->pixmap;
-
-	switch (src_private->attachment) {
-		case DRI2BufferFrontLeft : s = "DRI2 front left"; break;
-		case DRI2BufferFakeFrontLeft : s = "DRI2 fake front left"; break;
-		case DRI2BufferBackLeft : s = "DRI2 back left"; break;
-		default : s = "unknown"; break;
-	}
-	switch (dst_private->attachment) {
-		case DRI2BufferFrontLeft : d = "DRI2 front left"; break;
-		case DRI2BufferFakeFrontLeft : d = "DRI2 fake front left"; break;
-		case DRI2BufferBackLeft : d = "DRI2 back left"; break;
-		default : d = "unknown"; break;
-	}
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "glamoCopyRegion"
-	                                     " %s (%i) -> %s (%i)\n",
-	                                     s, src_private->attachment,
-	                                     d, dst_private->attachment);
 
 	if (src_private->attachment == DRI2BufferFrontLeft) {
 		src_pixmap = (PixmapPtr)drawable;
