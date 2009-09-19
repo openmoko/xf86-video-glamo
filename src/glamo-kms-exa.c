@@ -377,9 +377,6 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 		return TRUE;
 	}
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "PrepareAccess (%i)\n",
-	          driver_priv->bo->handle);
-
 	/* Return as quickly as possible if we have a mapping already */
 	if ( driver_priv->bo->virtual ) {
 		pPix->devPrivate.ptr = driver_priv->bo->virtual;
