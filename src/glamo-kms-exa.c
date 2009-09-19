@@ -55,6 +55,7 @@
 #include "glamo.h"
 #include "glamo-regs.h"
 #include "glamo-kms-exa.h"
+#include "glamo-drm.h"
 
 #include <drm/glamo_drm.h>
 #include <drm/glamo_bo.h>
@@ -112,71 +113,6 @@ static const CARD8 GLAMOBltRop[16] = {
     /* GXnand       */      0x77,         /* NOT src OR NOT dst */
     /* GXset        */      0xff,         /* 1 */
 };
-
-
-/* Submit the prepared command sequence to the kernel */
-static void GlamoDRMDispatch(GlamoPtr pGlamo)
-{
-	drm_glamo_cmd_buffer_t cmdbuf;
-	int r;
-
-	cmdbuf.buf = (char *)pGlamo->cmdq_drm;
-	cmdbuf.bufsz = pGlamo->cmdq_drm_used * 2;	/* -> bytes */
-	cmdbuf.nobjs = pGlamo->cmdq_obj_used;
-	cmdbuf.objs = pGlamo->cmdq_objs;
-	cmdbuf.obj_pos = pGlamo->cmdq_obj_pos;
-
-	r = drmCommandWrite(pGlamo->drm_fd, DRM_GLAMO_CMDBUF,
-	                    &cmdbuf, sizeof(cmdbuf));
-	if ( r != 0 ) {
-		xf86DrvMsg(pGlamo->pScreen->myNum, X_ERROR,
-		           "DRM_GLAMO_CMDBUF failed\n");
-	}
-
-	/* Reset counts to zero for the next sequence */
-	pGlamo->cmdq_obj_used = 0;
-	pGlamo->cmdq_drm_used = 0;
-}
-
-
-static inline void GlamoDRMAddCommand(GlamoPtr pGlamo, uint16_t reg,
-                                      uint16_t val)
-{
-	if ( pGlamo->cmdq_drm_used == pGlamo->cmdq_drm_size ) {
-		xf86DrvMsg(pGlamo->pScreen->myNum, X_INFO,
-		           "Forced command cache flush.\n");
-		GlamoDRMDispatch(pGlamo);
-	}
-
-	/* Record command */
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg;
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = val;
-}
-
-
-static inline void GlamoDRMAddCommandBO(GlamoPtr pGlamo, uint16_t reg,
-                                        struct glamo_bo *bo)
-{
-	if ( pGlamo->cmdq_drm_used == pGlamo->cmdq_drm_size ) {
-		xf86DrvMsg(pGlamo->pScreen->myNum, X_INFO,
-		           "Forced command cache flush.\n");
-		GlamoDRMDispatch(pGlamo);
-	}
-
-	/* Record object position */
-	pGlamo->cmdq_objs[pGlamo->cmdq_obj_used] = bo->handle;
-	/* -> bytes */
-	pGlamo->cmdq_obj_pos[pGlamo->cmdq_obj_used] = pGlamo->cmdq_drm_used * 2;
-	pGlamo->cmdq_obj_used++;
-
-	/* Record command */
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg;
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = reg+2;
-	pGlamo->cmdq_drm[pGlamo->cmdq_drm_used++] = 0x0000;
-
-	pGlamo->last_buffer_object = bo;
-}
 
 
 unsigned int driGetPixmapHandle(PixmapPtr pPixmap, unsigned int *flags)
@@ -262,8 +198,9 @@ static Bool GlamoKMSExaPrepareCopy(PixmapPtr pSrc, PixmapPtr pDst, int dx, int d
 	priv_dst = exaGetPixmapDriverPrivate(pDst);
 
 	if (pSrc->drawable.bitsPerPixel != 16 ||
-	    pDst->drawable.bitsPerPixel != 16)
+	    pDst->drawable.bitsPerPixel != 16) {
 		GLAMO_FALLBACK(("Only 16bpp is supported"));
+	}
 
 	mask = FbFullMask(16);
 	if ((pm & mask) != mask) {
@@ -439,6 +376,9 @@ static Bool GlamoKMSExaPrepareAccess(PixmapPtr pPix, int index)
 				"%s: no buffer object?\n", __FUNCTION__);
 		return TRUE;
 	}
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "PrepareAccess (%i)\n",
+	          driver_priv->bo->handle);
 
 	/* Return as quickly as possible if we have a mapping already */
 	if ( driver_priv->bo->virtual ) {
@@ -619,12 +559,7 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	exa->WaitMarker = GlamoKMSExaWaitMarker;
 
 	/* Prepare temporary buffers */
-	pGlamo->cmdq_objs = malloc(1024);
-	pGlamo->cmdq_obj_pos = malloc(1024);
-	pGlamo->cmdq_obj_used = 0;
-	pGlamo->cmdq_drm_used = 0;
-	pGlamo->cmdq_drm_size = 4 * 1024;
-	pGlamo->cmdq_drm = malloc(pGlamo->cmdq_drm_size);
+	GlamoDRMInit(pGlamo);
 	pGlamo->last_buffer_object = NULL;
 	for ( i=0; i<NUM_EXA_BUFFER_MARKERS; i++ ) {
 		pGlamo->exa_buffer_markers[i] = NULL;

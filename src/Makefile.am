@@ -40,4 +40,5 @@ glamo_drv_la_SOURCES = \
          glamo-kms-crtc.c \
          glamo-kms-output.c \
          glamo-dri2.c \
-         glamo-kms-exa.c
+         glamo-kms-exa.c \
+         glamo-drm.c
