@@ -96,6 +96,7 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
                                        unsigned int format)
 {
 	ScreenPtr pScreen = drawable->pScreen;
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	DRI2BufferPtr buffer;
 	struct glamo_dri2_buffer_priv *private;
 	PixmapPtr pixmap;
@@ -113,6 +114,8 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
 	}
 
 	if ( attachment == DRI2BufferFrontLeft ) {
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		           "Front left buffer\n");
 		if ( drawable->type == DRAWABLE_PIXMAP ) {
 			pixmap = (PixmapPtr)drawable;
 		} else {
@@ -120,6 +123,8 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
 		}
 		pixmap->refcnt++;
 	} else {
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		           "Attachment type %i\n", attachment);
 		pixmap = pScreen->CreatePixmap(pScreen,
 		                           drawable->width,
 		                           drawable->height,
@@ -135,8 +140,9 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
 	}
 	r = glamo_gem_name_buffer(driver_priv->bo, &buffer->name);
 	if (r) {
-		fprintf(stderr, "Couldn't name buffer: %d %s\n",
-		        r, strerror(r));
+		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+		           "Couldn't name buffer: %d %s\n",
+		           r, strerror(r));
 		xfree(buffer);
 		xfree(private);
 		return NULL;
@@ -159,6 +165,7 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr drawable,
                                         unsigned int *attachments, int count)
 {
 	ScreenPtr pScreen = drawable->pScreen;
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	int i;
 	DRI2BufferPtr buffers;
 	struct glamo_dri2_buffer_priv *privates;
@@ -202,8 +209,9 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr drawable,
 		}
 		r = glamo_gem_name_buffer(driver_priv->bo, &buffers[i].name);
 		if (r) {
-			fprintf(stderr, "Couldn't name buffer: %d %s\n",
-				r, strerror(r));
+			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+			           "Couldn't name buffer: %d %s\n",
+			           r, strerror(r));
 			xfree(buffers);
 			xfree(privates);
 			return NULL;
