@@ -271,9 +271,56 @@ static void glamoDestroyBuffers(DrawablePtr pDraw,
 #endif
 
 
-static void glamoCopyRegion(DrawablePtr pDraw, RegionPtr pRegion,
-                            DRI2BufferPtr pDestBuffer, DRI2BufferPtr pSrcBuffer)
+static void glamoCopyRegion(DrawablePtr drawable, RegionPtr region,
+                            DRI2BufferPtr dst_buffer, DRI2BufferPtr src_buffer)
 {
+	struct glamo_dri2_buffer_priv *src_private;
+	struct glamo_dri2_buffer_priv *dst_private;
+	ScreenPtr pScreen = drawable->pScreen;
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	PixmapPtr src_pixmap;
+	PixmapPtr dst_pixmap;
+	RegionPtr copy_clip;
+	GCPtr gc;
+	char *s, *d;
+
+	src_private = src_buffer->driverPrivate;
+	dst_private = dst_buffer->driverPrivate;
+	src_pixmap = src_private->pixmap;
+	dst_pixmap = dst_private->pixmap;
+
+	switch (src_private->attachment) {
+		case DRI2BufferFrontLeft : s = "DRI2 front left"; break;
+		case DRI2BufferFakeFrontLeft : s = "DRI2 fake front left"; break;
+		case DRI2BufferBackLeft : s = "DRI2 back left"; break;
+		default : s = "unknown"; break;
+	}
+	switch (dst_private->attachment) {
+		case DRI2BufferFrontLeft : d = "DRI2 front left"; break;
+		case DRI2BufferFakeFrontLeft : d = "DRI2 fake front left"; break;
+		case DRI2BufferBackLeft : d = "DRI2 back left"; break;
+		default : d = "unknown"; break;
+	}
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "glamoCopyRegion"
+	                                     " %s (%i) -> %s (%i)\n",
+	                                     s, src_private->attachment,
+	                                     d, dst_private->attachment);
+
+	if (src_private->attachment == DRI2BufferFrontLeft) {
+		src_pixmap = (PixmapPtr)drawable;
+	}
+	if (dst_private->attachment == DRI2BufferFrontLeft) {
+		dst_pixmap = (PixmapPtr)drawable;
+	}
+
+	gc = GetScratchGC(drawable->depth, pScreen);
+	copy_clip = REGION_CREATE(pScreen, NULL, 0);
+	REGION_COPY(pScreen, copy_clip, region);
+	gc->funcs->ChangeClip(gc, CT_REGION, copy_clip, 0);
+	ValidateGC(&dst_pixmap->drawable, gc);
+	gc->ops->CopyArea(&src_pixmap->drawable, &dst_pixmap->drawable, gc,
+		         0, 0, drawable->width, drawable->height, 0, 0);
+	FreeScratchGC(gc);
 }
 
 
