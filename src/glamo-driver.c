@@ -298,6 +298,8 @@ GlamoFbdevProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
 			if (pScrn) {
 
 				foundScreen = TRUE;
+				xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+				           "Not using KMS\n");
 
 				pScrn->driverVersion = GLAMO_VERSION;
 				pScrn->driverName    = GLAMO_DRIVER_NAME;
@@ -345,6 +347,7 @@ GlamoKMSProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
 		if ( pScrn ) {
 
 			foundScreen = TRUE;
+			xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using KMS!\n");
 
 			/* Plug in KMS functions */
 			pScrn->driverVersion = GLAMO_VERSION;
@@ -367,7 +370,6 @@ GlamoKMSProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
 static Bool
 GlamoProbe(DriverPtr drv, int flags)
 {
-	ScrnInfoPtr pScrn;
 	GDevPtr *devSections;
 	int numDevSections;
 	Bool foundScreen = FALSE;
@@ -384,10 +386,8 @@ GlamoProbe(DriverPtr drv, int flags)
 	/* Is today a good day to use KMS? */
 	if ( GlamoKernelModesettingAvailable() ) {
 		foundScreen = GlamoKMSProbe(drv, devSections, numDevSections);
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using KMS!\n");
 	} else {
 		foundScreen = GlamoFbdevProbe(drv, devSections, numDevSections);
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Not using KMS\n");
 	}
 
 	xfree(devSections);
