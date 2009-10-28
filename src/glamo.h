@@ -37,6 +37,8 @@
 #include "xf86.h"
 #include "exa.h"
 #include <linux/fb.h>
+#include <drm/drm.h>
+#include <drm/glamo_bo.h>
 
 #define GLAMO_REG_BASE(c)		((c)->attr.address[0])
 #define GLAMO_REG_SIZE(c)		(0x2400)
@@ -73,6 +75,9 @@ MMIO_IN16(__volatile__ void *base, const unsigned long offset)
 
 #endif
 
+/* The number of EXA wait markers which can be active at once */
+#define NUM_EXA_BUFFER_MARKERS 32
+
 typedef volatile CARD16        VOL16;
 
 typedef struct _MemBuf {
@@ -105,6 +110,18 @@ typedef struct {
 	 */
 	MemBuf *cmd_queue;
 
+	/* The same, when using DRM */
+	uint16_t *cmdq_drm;
+	int cmdq_drm_used;
+	int cmdq_drm_size;
+	int cmdq_obj_used;
+	uint32_t *cmdq_objs;
+	unsigned int *cmdq_obj_pos;
+	struct glamo_bo *last_buffer_object;  /* The last buffer object
+	                                       * referenced in the cmdq */
+	struct glamo_bo *exa_buffer_markers[NUM_EXA_BUFFER_MARKERS];
+	unsigned int exa_marker_index;  /* Index into exa_buffer_markers */
+
 	/* What was GLAMOCardInfo */
 	volatile char *reg_base;
 	Bool is_3362;
@@ -134,6 +151,13 @@ typedef struct {
 
 /* Use hardware acceleration */
     Bool accel;
+
+    /* Things to do with DRI */
+    int drm_fd;
+    unsigned int SaveGeneration;
+    unsigned int fb_id;
+    char drm_devname[64];
+    struct glamo_bo_manager *bufmgr;
 
     uint16_t *colormap;
 } GlamoRec, *GlamoPtr;
@@ -174,5 +198,9 @@ GlamoCrtcInit(ScrnInfoPtr pScrn);
 /* glamo-output.h */
 void
 GlamoOutputInit(ScrnInfoPtr pScrn);
+
+/* glamo-driver.c */
+extern Bool GlamoGetRec(ScrnInfoPtr pScrn);
+extern void GlamoFreeRec(ScrnInfoPtr pScrn);
 
 #endif /* _GLAMO_H_ */

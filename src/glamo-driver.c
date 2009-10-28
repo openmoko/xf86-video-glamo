@@ -34,6 +34,7 @@
 
 #include "glamo.h"
 #include "glamo-regs.h"
+#include "glamo-kms-driver.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -179,7 +180,7 @@ GlamoSetup(pointer module, pointer opts, int *errmaj, int *errmin)
 
 #endif /* XFree86LOADER */
 
-static Bool
+Bool
 GlamoGetRec(ScrnInfoPtr pScrn)
 {
 	if (pScrn->driverPrivate != NULL)
@@ -189,7 +190,7 @@ GlamoGetRec(ScrnInfoPtr pScrn)
 	return TRUE;
 }
 
-static void
+void
 GlamoFreeRec(ScrnInfoPtr pScrn)
 {
 	if (pScrn->driverPrivate == NULL)
@@ -274,39 +275,31 @@ GlamoIdentify(int flags)
 }
 
 static Bool
-GlamoProbe(DriverPtr drv, int flags)
+GlamoFbdevProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
 {
-	int i;
-	ScrnInfoPtr pScrn;
-	GDevPtr *devSections;
-	int numDevSections;
 	char *dev;
 	Bool foundScreen = FALSE;
+	int i;
+	ScrnInfoPtr pScrn;
 
-	TRACE("probe start");
-
-	/* For now, just bail out for PROBE_DETECT. */
-	if (flags & PROBE_DETECT)
-		return FALSE;
-
-	if ((numDevSections = xf86MatchDevice(GLAMO_DRIVER_NAME, &devSections)) <= 0)
-		return FALSE;
-
-	if (!xf86LoadDrvSubModule(drv, "fbdevhw"))
-		return FALSE;
+	if (!xf86LoadDrvSubModule(drv, "fbdevhw")) return FALSE;
 
 	for (i = 0; i < numDevSections; i++) {
+
 		dev = xf86FindOptionValue(devSections[i]->options, "Device");
 		if (fbdevHWProbe(NULL, dev, NULL)) {
 			int entity;
 			pScrn = NULL;
 
 			entity = xf86ClaimFbSlot(drv, 0, devSections[i], TRUE);
-			pScrn = xf86ConfigFbEntity(pScrn,0,entity,
-			                           NULL, NULL, NULL, NULL);
+			pScrn = xf86ConfigFbEntity(pScrn,0,entity, NULL, NULL,
+				                   NULL, NULL);
 
 			if (pScrn) {
+
 				foundScreen = TRUE;
+				xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+				           "Not using KMS\n");
 
 				pScrn->driverVersion = GLAMO_VERSION;
 				pScrn->driverName    = GLAMO_DRIVER_NAME;
@@ -321,10 +314,82 @@ GlamoProbe(DriverPtr drv, int flags)
 				pScrn->ValidMode     = fbdevHWValidModeWeak();
 
 				xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-					   "using %s\n", dev ? dev : "default device");
+					   "using %s\n",
+					   dev ? dev : "default device\n");
+
 			}
 		}
+
 	}
+
+	return foundScreen;
+}
+
+static Bool
+GlamoKMSProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
+{
+	ScrnInfoPtr pScrn = NULL;
+	int entity;
+	Bool foundScreen = FALSE;
+	int i;
+
+	for ( i = 0; i < numDevSections; i++ ) {
+
+		/* This is a little dodgy.  We aren't really using fbdevhw
+		 * (/dev/fb0 is irrelevant), but we need a device entity to make
+		 * the later stages of initialisation work.  xf86ClaimFbSlot()
+		 * does the minimum required to make this work, so we use it
+		 * despite the above. */
+		entity = xf86ClaimFbSlot(drv, 0, devSections[i], TRUE);
+		pScrn = xf86ConfigFbEntity(pScrn, 0, entity, NULL, NULL, NULL,
+		                           NULL);
+
+		if ( pScrn ) {
+
+			foundScreen = TRUE;
+			xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using KMS!\n");
+
+			/* Plug in KMS functions */
+			pScrn->driverVersion = GLAMO_VERSION;
+			pScrn->driverName    = GLAMO_DRIVER_NAME;
+			pScrn->name          = GLAMO_NAME;
+			pScrn->PreInit       = GlamoKMSPreInit;
+			pScrn->ScreenInit    = GlamoKMSScreenInit;
+			pScrn->SwitchMode    = GlamoKMSSwitchMode;
+			pScrn->AdjustFrame   = GlamoKMSAdjustFrame;
+			pScrn->EnterVT       = GlamoKMSEnterVT;
+			pScrn->LeaveVT       = GlamoKMSLeaveVT;
+			pScrn->ValidMode     = GlamoKMSValidMode;
+
+		}
+	}
+
+	return foundScreen;
+}
+
+static Bool
+GlamoProbe(DriverPtr drv, int flags)
+{
+	GDevPtr *devSections;
+	int numDevSections;
+	Bool foundScreen = FALSE;
+
+	TRACE("probe start");
+
+	/* For now, just bail out for PROBE_DETECT. */
+	if (flags & PROBE_DETECT)
+		return FALSE;
+
+	numDevSections = xf86MatchDevice(GLAMO_DRIVER_NAME, &devSections);
+	if (numDevSections <= 0) return FALSE;
+
+	/* Is today a good day to use KMS? */
+	if ( GlamoKernelModesettingAvailable() ) {
+		foundScreen = GlamoKMSProbe(drv, devSections, numDevSections);
+	} else {
+		foundScreen = GlamoFbdevProbe(drv, devSections, numDevSections);
+	}
+
 	xfree(devSections);
 	TRACE("probe done");
 	return foundScreen;
@@ -799,4 +864,3 @@ GlamoLoadColormap(ScrnInfoPtr pScrn, int numColors, int *indices,
             (colors[indices[i]].blue >> 3);
     }
 }
-
