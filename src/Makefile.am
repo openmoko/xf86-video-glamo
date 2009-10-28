@@ -25,7 +25,7 @@
 # TODO: -nostdlib/-Bstatic/-lgcc platform magic, not installing the .a, etc.
 AM_CFLAGS = @XORG_CFLAGS@ @DRI_CFLAGS@ -pedantic -Wall -Werror -std=gnu99
 glamo_drv_la_LTLIBRARIES = glamo_drv.la
-glamo_drv_la_LDFLAGS = -module -avoid-version -ldrm -ldrm_glamo
+glamo_drv_la_LDFLAGS = -module -avoid-version @LIBDRM_LIBS@
 glamo_drv_ladir = @moduledir@/drivers
 
 glamo_drv_la_SOURCES = \
@@ -35,10 +35,13 @@ glamo_drv_la_SOURCES = \
          glamo-draw.c \
          glamo-display.c \
          glamo-output.c \
-         glamo-engine.c \
-         glamo-kms-driver.c \
-         glamo-kms-crtc.c \
-         glamo-kms-output.c \
-         glamo-dri2.c \
-         glamo-kms-exa.c \
-         glamo-drm.c
+         glamo-engine.c
+
+if ENABLE_KMS
+glamo_drv_la_SOURCES += glamo-kms-driver.c \
+	glamo-kms-crtc.c \
+	glamo-kms-output.c \
+	glamo-dri2.c \
+	glamo-kms-exa.c \
+	glamo-drm.c
+endif

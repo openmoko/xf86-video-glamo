@@ -63,6 +63,7 @@ AC_ARG_ENABLE(engine-ioctls, AS_HELP_STRING([--enable-engine-ioctls],
                                  ioctls to enable/disable engines. This requires
                                  kernel support. (default: disabled)]),
              [HAVE_ENGINE_IOCTLS=$enableval], [HAVE_ENGINE_IOCTLS=no])
+
 # Checks for extensions
 XORG_DRIVER_CHECK_EXT(RANDR, randrproto)
 XORG_DRIVER_CHECK_EXT(RENDER, renderproto)
@@ -81,9 +82,28 @@ if test "x$HAVE_ENGINE_IOCTLS" = xyes; then
     AC_DEFINE(HAVE_ENGINE_IOCTLS, 1, [Use ioctls to enable/disable engines])
 fi
 
+# Check if KMS is to be included
+AC_MSG_CHECKING([whether to use KMS])
+AC_DEFINE(ENABLE_KMS, 1, [Define to 1 if KMS is to be supported])
+AC_ARG_ENABLE(kms,
+[  --enable-kms    Include support for kernel modesetting (KMS)],
+[case "${enableval}" in
+  yes) kms=true
+       AC_MSG_RESULT([yes]) ;;
+  no)  kms=false
+       AC_MSG_RESULT([no]) ;;
+  *) AC_MSG_ERROR(bad value ${enableval} for --enable-kms) ;;
+esac],
+[kms=false
+AC_MSG_RESULT([no])])
+AM_CONDITIONAL([ENABLE_KMS], test x$kms = xtrue)
+AC_SUBST([ENABLE_KMS])
+
 # Checks for libraries.
-PKG_CHECK_MODULES(DRI, [libdrm xf86driproto])
-CFLAGS="$XORG_CFLAGS $DRI_CFLAGS"
+if test x$kms = xtrue; then
+    PKG_CHECK_MODULES(DRI, [libdrm xf86driproto])
+    AC_SUBST([LIBDRM_LIBS])
+fi
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -96,6 +116,8 @@ AC_SUBST([DRIVER_NAME])
 
 XORG_MANPAGE_SECTIONS
 XORG_RELEASE_VERSION
+
+CFLAGS="$XORG_CFLAGS $DRI_CFLAGS"
 
 AC_OUTPUT([
 	Makefile
