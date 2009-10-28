@@ -66,9 +66,9 @@ GLAMOEngineReset(GlamoPtr pGlamo, enum GLAMOEngine engine)
 			break;
 	}
 	MMIOSetBitMask(mmio, reg, mask, 0xffff);
-    sleep(1);
+    usleep(15000);
     MMIOSetBitMask(mmio, reg, mask, 0);
-    sleep(1);
+    usleep(15000);
 #endif
 }
 
