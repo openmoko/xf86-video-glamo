@@ -102,6 +102,7 @@ AC_SUBST([ENABLE_KMS])
 # Checks for libraries.
 if test x$kms = xtrue; then
     PKG_CHECK_MODULES(DRI, [libdrm xf86driproto])
+    LIBDRM_LIBS="-ldrm -ldrm_glamo"
     AC_SUBST([LIBDRM_LIBS])
 fi
 
