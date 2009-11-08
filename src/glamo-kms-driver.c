@@ -78,24 +78,49 @@
 Bool GlamoKernelModesettingAvailable()
 {
 	DIR *dir;
-	struct dirent *ent;
 
+	/* Try old location */
 	dir = opendir("/sys/bus/platform/devices/glamo-fb.0/");
-	if ( !dir ) return FALSE;
+	if ( dir ) {
 
-	do {
+		struct dirent *ent;
 
-		ent = readdir(dir);
-		if ( !ent ) return FALSE;
+		do {
 
-		if ( strncmp(ent->d_name, "drm:controlD", 12) == 0 ) {
-			closedir(dir);
-			return TRUE;
-		}
+			ent = readdir(dir);
+			if ( !ent ) return FALSE;
 
-	} while ( ent );
+			if ( strncmp(ent->d_name, "drm:controlD", 12) == 0 ) {
+				closedir(dir);
+				return TRUE;
+			}
 
-	closedir(dir);
+		} while ( ent );
+
+		closedir(dir);
+	}
+
+	/* Try new location */
+	dir = opendir("/sys/bus/platform/devices/glamo-fb.0/drm/");
+	if ( dir ) {
+
+		struct dirent *ent;
+
+		do {
+
+			ent = readdir(dir);
+			if ( !ent ) return FALSE;
+
+			if ( strncmp(ent->d_name, "drm:controlD", 12) == 0 ) {
+				closedir(dir);
+				return TRUE;
+			}
+
+		} while ( ent );
+
+		closedir(dir);
+	}
+
 	return FALSE;
 }
 
