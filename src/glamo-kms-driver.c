@@ -88,7 +88,7 @@ Bool GlamoKernelModesettingAvailable()
 		do {
 
 			ent = readdir(dir);
-			if ( !ent ) return FALSE;
+			if ( !ent ) break;
 
 			if ( strncmp(ent->d_name, "drm:controlD", 12) == 0 ) {
 				closedir(dir);
@@ -109,7 +109,7 @@ Bool GlamoKernelModesettingAvailable()
 		do {
 
 			ent = readdir(dir);
-			if ( !ent ) return FALSE;
+			if ( !ent ) break;
 
 			if ( strncmp(ent->d_name, "controlD", 8) == 0 ) {
 				closedir(dir);
