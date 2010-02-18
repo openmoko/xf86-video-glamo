@@ -326,7 +326,11 @@ void driScreenInit(ScreenPtr pScreen)
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 		   "[glamo-dri] Name of DRM device is '%s'\n", p);
 
-	dri2info.version = DRI2INFOREC_VERSION;
+#if DRI2INFOREC_VERSION >= 3
+	dri2info.version = 3;
+#else
+	dri2info.version = 2;
+#endif
 	dri2info.fd = pGlamo->drm_fd;
 	dri2info.deviceName = p;
 	dri2info.driverName = "glamo";
