@@ -119,7 +119,7 @@ static void crtc_mode_set(xf86CrtcPtr crtc, DisplayModePtr mode,
 	drmModeCrtcPtr drm_crtc = crtcp->drm_crtc;
 	drmModeModeInfo drm_mode;
 
-	drm_mode.clock = mode->Clock;
+	drm_mode.clock = mode->Clock * 1000.0;
 	drm_mode.hdisplay = mode->HDisplay;
 	drm_mode.hsync_start = mode->HSyncStart;
 	drm_mode.hsync_end = mode->HSyncEnd;

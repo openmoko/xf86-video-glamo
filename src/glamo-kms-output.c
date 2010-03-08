@@ -152,7 +152,7 @@ static DisplayModePtr get_modes(xf86OutputPtr output)
 			if (!mode)
 				continue;
 			mode->type = 0;
-			mode->Clock = drm_mode->clock;
+			mode->Clock = drm_mode->clock / 1000.0;
 			mode->HDisplay = drm_mode->hdisplay;
 			mode->HSyncStart = drm_mode->hsync_start;
 			mode->HSyncEnd = drm_mode->hsync_end;
