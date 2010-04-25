@@ -133,10 +133,16 @@ void GlamoKMSAdjustFrame(int scrnIndex, int x, int y, int flags)
 	xf86CrtcPtr crtc = output->crtc;
 
 	if (crtc && crtc->enabled) {
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0)
+		crtc->funcs->set_mode_major(crtc, pScrn->currentMode,
+		                            crtc->rotation, x, y);
+#else
 		crtc->funcs->mode_set(crtc,
 		                      pScrn->currentMode,
 		                      pScrn->currentMode,
 		                      x, y);
+
+#endif
 		crtc->x = output->initial_x + x;
 		crtc->y = output->initial_y + y;
 	}

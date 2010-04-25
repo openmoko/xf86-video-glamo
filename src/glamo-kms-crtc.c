@@ -80,6 +80,118 @@ static void crtc_dpms(xf86CrtcPtr crtc, int mode)
 }
 
 
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0)
+
+
+static Bool crtc_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
+                                Rotation rot, int x, int y)
+{
+	ScrnInfoPtr scrn = crtc->scrn;
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
+	DisplayModeRec saved_mode;
+	int saved_x, saved_y;
+	Rotation saved_rotation;
+	GlamoPtr pGlamo = GlamoPTR(crtc->scrn);
+	Bool ret = FALSE;
+	int i;
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
+	xf86OutputPtr output = config->output[config->compat_output];
+	drmModeConnectorPtr drm_connector = output->driver_private;
+	struct crtc_private *crtcp = crtc->driver_private;
+	drmModeCrtcPtr drm_crtc = crtcp->drm_crtc;
+	drmModeModeInfo drm_mode;
+
+	crtc->enabled = xf86CrtcInUse (crtc);
+
+	if ( !crtc->enabled ) return TRUE;
+
+	saved_mode = crtc->mode;
+	saved_x = crtc->x;
+	saved_y = crtc->y;
+	saved_rotation = crtc->rotation;
+
+	crtc->mode = *mode;
+	crtc->x = x;
+	crtc->y = y;
+	crtc->rotation = rot;
+
+	crtc->funcs->dpms(crtc, DPMSModeOff);
+	for ( i=0; i<xf86_config->num_output; i++ ) {
+		xf86OutputPtr output = xf86_config->output[i];
+		if (output->crtc != crtc)continue;
+		output->funcs->prepare(output);
+	}
+
+	/* Set the mode... */
+	drm_mode.clock = mode->Clock * 1000.0;
+	if ( (rot == RR_Rotate_0) || (rot == RR_Rotate_180) ) {
+		drm_mode.hdisplay = mode->HDisplay;
+		drm_mode.hsync_start = mode->HSyncStart;
+		drm_mode.hsync_end = mode->HSyncEnd;
+		drm_mode.htotal = mode->HTotal;
+		drm_mode.vdisplay = mode->VDisplay;
+		drm_mode.vsync_start = mode->VSyncStart;
+		drm_mode.vsync_end = mode->VSyncEnd;
+		drm_mode.vtotal = mode->VTotal;
+	} else if ( (rot == RR_Rotate_90) || (rot == RR_Rotate_270) ) {
+		drm_mode.hdisplay = mode->VDisplay;
+		drm_mode.hsync_start = mode->VSyncStart;
+		drm_mode.hsync_end = mode->VSyncEnd;
+		drm_mode.htotal = mode->VTotal;
+		drm_mode.vdisplay = mode->HDisplay;
+		drm_mode.vsync_start = mode->HSyncStart;
+		drm_mode.vsync_end = mode->HSyncEnd;
+		drm_mode.vtotal = mode->HTotal;
+	} else {
+		drm_mode.hdisplay = mode->HDisplay;
+		drm_mode.hsync_start = mode->HSyncStart;
+		drm_mode.hsync_end = mode->HSyncEnd;
+		drm_mode.htotal = mode->HTotal;
+		drm_mode.vdisplay = mode->VDisplay;
+		drm_mode.vsync_start = mode->VSyncStart;
+		drm_mode.vsync_end = mode->VSyncEnd;
+		drm_mode.vtotal = mode->VTotal;
+		ErrorF("Couldn't determine rotation\n");
+	}
+	drm_mode.flags = mode->Flags;
+	drm_mode.hskew = mode->HSkew;
+	drm_mode.vscan = mode->VScan;
+	drm_mode.vrefresh = mode->VRefresh;
+	if ( !mode->name ) xf86SetModeDefaultName(mode);
+	strncpy(drm_mode.name, mode->name, DRM_DISPLAY_MODE_LEN);
+	drmModeSetCrtc(pGlamo->drm_fd, drm_crtc->crtc_id, pGlamo->fb_id,
+	                x, y, &drm_connector->connector_id, 1, &drm_mode);
+
+	crtc->funcs->dpms (crtc, DPMSModeOn);
+	for (i = 0; i < xf86_config->num_output; i++){
+		xf86OutputPtr output = xf86_config->output[i];
+		if (output->crtc == crtc) {
+			output->funcs->commit(output);
+#ifdef RANDR_12_INTERFACE
+			if (output->randr_output) {
+				RRPostPendingProperties (output->randr_output);
+			}
+#endif
+		}
+	}
+
+	ret = TRUE;
+	if ( scrn->pScreen ) xf86CrtcSetScreenSubpixelOrder(scrn->pScreen);
+
+	if ( !ret ) {
+		crtc->x = saved_x;
+		crtc->y = saved_y;
+		crtc->rotation = saved_rotation;
+		crtc->mode = saved_mode;
+	}
+
+	return ret;
+}
+
+
+#else /* XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0) */
+
+
 static Bool crtc_lock(xf86CrtcPtr crtc)
 {
 	return FALSE;
@@ -140,6 +252,8 @@ static void crtc_mode_set(xf86CrtcPtr crtc, DisplayModePtr mode,
 	               &drm_connector->connector_id, 1, &drm_mode);
 }
 
+#endif /* XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0) */
+
 
 void crtc_load_lut(xf86CrtcPtr crtc)
 {
@@ -185,12 +299,22 @@ static const xf86CrtcFuncsRec crtc_funcs = {
 	.dpms = crtc_dpms,
 	.save = NULL,
 	.restore = NULL,
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,5,0,0,0)
+	.lock = NULL,
+	.unlock = NULL,
+	.mode_fixup = NULL,
+	.prepare = NULL,
+	.mode_set = NULL,
+	.commit = NULL,
+	.set_mode_major = crtc_set_mode_major,
+#else
 	.lock = crtc_lock,
 	.unlock = crtc_unlock,
 	.mode_fixup = crtc_mode_fixup,
 	.prepare = crtc_prepare,
 	.mode_set = crtc_mode_set,
 	.commit = crtc_commit,
+#endif
 	.gamma_set = crtc_gamma_set,
 	.shadow_create = crtc_shadow_create,
 	.shadow_allocate = crtc_shadow_allocate,
