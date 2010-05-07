@@ -23,7 +23,7 @@
 # -avoid-version prevents gratuitous .0.0.0 version numbers on the end
 # _ladir passes a dummy rpath to libtool so the thing will actually link
 # TODO: -nostdlib/-Bstatic/-lgcc platform magic, not installing the .a, etc.
-AM_CFLAGS = @XORG_CFLAGS@ @DRI_CFLAGS@ -pedantic -Wall -Werror -std=gnu99
+AM_CFLAGS = @XORG_CFLAGS@ @DRI_CFLAGS@ -Wall -Werror -std=gnu99
 glamo_drv_la_LTLIBRARIES = glamo_drv.la
 glamo_drv_la_LDFLAGS = -module -avoid-version @LIBDRM_LIBS@
 glamo_drv_ladir = @moduledir@/drivers
