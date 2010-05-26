@@ -37,8 +37,8 @@
 #include "xf86.h"
 #include "exa.h"
 #include <linux/fb.h>
-#include <drm/drm.h>
-#include <drm/glamo_bo.h>
+#include <libdrm/drm.h>
+#include <libdrm/glamo_bo.h>
 
 #define GLAMO_REG_BASE(c)		((c)->attr.address[0])
 #define GLAMO_REG_SIZE(c)		(0x2400)

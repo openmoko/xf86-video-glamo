@@ -57,9 +57,9 @@
 #include "glamo-kms-exa.h"
 #include "glamo-drm.h"
 
-#include <drm/glamo_drm.h>
-#include <drm/glamo_bo.h>
-#include <drm/glamo_bo_gem.h>
+#include <libdrm/glamo_drm.h>
+#include <libdrm/glamo_bo.h>
+#include <libdrm/glamo_bo_gem.h>
 #include <xf86drm.h>
 
 
