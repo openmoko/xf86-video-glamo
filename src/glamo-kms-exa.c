@@ -299,7 +299,7 @@ static void *GlamoKMSExaCreatePixmap(ScreenPtr screen, int size, int align)
 	GlamoPtr pGlamo = GlamoPTR(pScrn);
 	struct glamo_exa_pixmap_priv *new_priv;
 
-	new_priv = xcalloc(1, sizeof(struct glamo_exa_pixmap_priv));
+	new_priv = calloc(1, sizeof(struct glamo_exa_pixmap_priv));
 	if (!new_priv)
 		return NULL;
 
@@ -311,7 +311,7 @@ static void *GlamoKMSExaCreatePixmap(ScreenPtr screen, int size, int align)
 	new_priv->bo = glamo_bo_open(pGlamo->bufmgr, 0, size, align,
 	                             GLAMO_GEM_DOMAIN_VRAM, 0);
 	if (!new_priv->bo) {
-		xfree(new_priv);
+		free(new_priv);
 		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 		           "Failed to create pixmap\n");
 		return NULL;
@@ -342,7 +342,7 @@ static void GlamoKMSExaDestroyPixmap(ScreenPtr pScreen, void *driverPriv)
 	if (driver_priv->bo)
 		glamo_bo_unref(driver_priv->bo);
 
-	xfree(driver_priv);
+	free(driver_priv);
 }
 
 
@@ -588,7 +588,7 @@ void GlamoKMSExaInit(ScrnInfoPtr pScrn)
 	} else {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"Failed to initialize EXA acceleration\n");
-		xfree(pGlamo->exa);
+		free(pGlamo->exa);
 		pGlamo->exa = NULL;
 	}
 }

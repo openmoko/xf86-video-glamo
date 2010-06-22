@@ -197,7 +197,7 @@ GLAMODrawFini(ScrnInfoPtr pScrn) {
     GLAMOCMDQFini(pScrn);
     if (pGlamo->exa) {
         exaDriverFini(pGlamo->pScreen);
-        xfree(pGlamo->exa);
+        free(pGlamo->exa);
         pGlamo->exa = NULL;
     }
 }
@@ -286,7 +286,7 @@ GLAMODrawExaInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size)
 		ErrorF("Initialized EXA acceleration\n");
 	} else {
 		ErrorF("Failed to initialize EXA acceleration\n");
-        xfree(pGlamo->exa);
+        free(pGlamo->exa);
         pGlamo->exa = NULL;
 	}
 

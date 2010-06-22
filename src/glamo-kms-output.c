@@ -148,7 +148,7 @@ static DisplayModePtr get_modes(xf86OutputPtr output)
 	for (i = 0; i < drm_connector->count_modes; i++) {
 		drm_mode = &drm_connector->modes[i];
 		if (drm_mode) {
-			mode = xcalloc(1, sizeof(DisplayModeRec));
+			mode = calloc(1, sizeof(DisplayModeRec));
 			if (!mode)
 				continue;
 			mode->type = 0;

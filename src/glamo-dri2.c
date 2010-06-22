@@ -103,13 +103,13 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
 	struct glamo_exa_pixmap_priv *driver_priv;
 	int r;
 
-	buffer = xcalloc(1, sizeof(*buffer));
+	buffer = calloc(1, sizeof(*buffer));
 	if (buffer == NULL) {
 		return NULL;
 	}
-	private = xcalloc(1, sizeof(*private));
+	private = calloc(1, sizeof(*private));
 	if (private == NULL) {
-		xfree(buffer);
+		free(buffer);
 		return NULL;
 	}
 
@@ -130,8 +130,8 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
 	exaMoveInPixmap(pixmap);
 	driver_priv = exaGetPixmapDriverPrivate(pixmap);
 	if ( !driver_priv ) {
-		xfree(buffer);
-		xfree(private);
+		free(buffer);
+		free(private);
 		return NULL;
 	}
 	r = glamo_gem_name_buffer(driver_priv->bo, &buffer->name);
@@ -139,8 +139,8 @@ static DRI2BufferPtr glamoCreateBuffer(DrawablePtr drawable,
 		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 		           "Couldn't name buffer: %d %s\n",
 		           r, strerror(r));
-		xfree(buffer);
-		xfree(private);
+		free(buffer);
+		free(private);
 		return NULL;
 	}
 	buffer->attachment = attachment;
@@ -166,11 +166,11 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr drawable,
 	DRI2BufferPtr buffers;
 	struct glamo_dri2_buffer_priv *privates;
 
-	buffers = xcalloc(count, sizeof *buffers);
+	buffers = calloc(count, sizeof *buffers);
 	if ( buffers == NULL ) return NULL;
-	privates = xcalloc(count, sizeof *privates);
+	privates = calloc(count, sizeof *privates);
 	if ( privates == NULL ) {
-		xfree(buffers);
+		free(buffers);
 		return NULL;
 	}
 
@@ -199,8 +199,8 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr drawable,
 		exaMoveInPixmap(pixmap);
 		driver_priv = exaGetPixmapDriverPrivate(pixmap);
 		if ( !driver_priv ) {
-			xfree(buffers);
-			xfree(privates);
+			free(buffers);
+			free(privates);
 			return NULL;
 		}
 		r = glamo_gem_name_buffer(driver_priv->bo, &buffers[i].name);
@@ -208,8 +208,8 @@ static DRI2BufferPtr glamoCreateBuffers(DrawablePtr drawable,
 			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 			           "Couldn't name buffer: %d %s\n",
 			           r, strerror(r));
-			xfree(buffers);
-			xfree(privates);
+			free(buffers);
+			free(privates);
 			return NULL;
 		}
 		buffers[i].attachment = attachments[i];
@@ -240,7 +240,7 @@ static void glamoDestroyBuffer(DrawablePtr pDraw,
 	pScreen->DestroyPixmap(private->pixmap);
 
 	if ( buffer ) {
-		xfree(buffer->driverPrivate);
+		free(buffer->driverPrivate);
 	}
 }
 
@@ -259,8 +259,8 @@ static void glamoDestroyBuffers(DrawablePtr pDraw,
 	}
 
 	if ( buffers ) {
-		xfree(buffers[0].driverPrivate);
-		xfree(buffers);
+		free(buffers[0].driverPrivate);
+		free(buffers);
 	}
 }
 

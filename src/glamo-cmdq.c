@@ -176,7 +176,7 @@ GLAMOCMDQInit(ScrnInfoPtr pScrn, size_t mem_start, size_t mem_size)
 
     pGlamo->ring_len = (CQ_LEN + 1) * 1024;
 
-    buf = (MemBuf *)xcalloc(1, sizeof(MemBuf) + pGlamo->ring_len);
+    buf = (MemBuf *)calloc(1, sizeof(MemBuf) + pGlamo->ring_len);
 
     if (!buf) {
         return FALSE;
@@ -215,7 +215,7 @@ GLAMOCMDQFini(ScrnInfoPtr pScrn) {
     GLAMOCMDQDisable(pScrn);
 
     if (pGlamo->cmd_queue) {
-	    xfree(pGlamo->cmd_queue);
+	    free(pGlamo->cmd_queue);
 	    pGlamo->cmd_queue = NULL;
     }
 }

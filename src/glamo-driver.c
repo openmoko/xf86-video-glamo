@@ -195,7 +195,7 @@ GlamoFreeRec(ScrnInfoPtr pScrn)
 {
 	if (pScrn->driverPrivate == NULL)
 		return;
-	xfree(pScrn->driverPrivate);
+	free(pScrn->driverPrivate);
 	pScrn->driverPrivate = NULL;
 }
 
@@ -398,7 +398,7 @@ GlamoProbe(DriverPtr drv, int flags)
 	foundScreen = GlamoFbdevProbe(drv, devSections, numDevSections);
 #endif  /* ENABLE_KMS */
 
-	xfree(devSections);
+	free(devSections);
 	TRACE("probe done");
 	return foundScreen;
 }
@@ -487,7 +487,7 @@ GlamoPreInit(ScrnInfoPtr pScrn, int flags)
 
     /* handle options */
     xf86CollectOptions(pScrn, NULL);
-    if (!(pGlamo->Options = xalloc(sizeof(GlamoOptions))))
+    if (!(pGlamo->Options = malloc(sizeof(GlamoOptions))))
         return FALSE;
     memcpy(pGlamo->Options, GlamoOptions, sizeof(GlamoOptions));
     xf86ProcessOptions(pScrn->scrnIndex, pGlamo->pEnt->device->options, pGlamo->Options);
@@ -667,7 +667,7 @@ GlamoCloseScreen(int scrnIndex, ScreenPtr pScreen)
     GlamoUnmapMMIO(pScrn);
 
     if (pGlamo->colormap) {
-        xfree(pGlamo->colormap);
+        free(pGlamo->colormap);
         pGlamo->colormap = NULL;
     }
 
@@ -860,10 +860,10 @@ GlamoLoadColormap(ScrnInfoPtr pScrn, int numColors, int *indices,
     ErrorF("%s:%s[%d]\n", __FILE__, __func__, __LINE__);
 
     if (pGlamo->colormap) {
-        xfree (pGlamo->colormap);
+        free (pGlamo->colormap);
     }
 
-    pGlamo->colormap = xalloc (sizeof(uint16_t) * numColors);
+    pGlamo->colormap = malloc (sizeof(uint16_t) * numColors);
 
     for (i = 0; i < numColors; ++i) {
         pGlamo->colormap[i] =

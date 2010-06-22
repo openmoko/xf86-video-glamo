@@ -263,7 +263,7 @@ static void GlamoOutputDestroy(xf86OutputPtr output) {
     GlamoOutputPtr pGlamoOutput = output->driver_private;
     while (pGlamoOutput->modes)
         xf86DeleteMode(&pGlamoOutput->modes, pGlamoOutput->modes);
-    xfree(pGlamoOutput);
+    free(pGlamoOutput);
 }
 
 static DisplayModePtr GlamoOutputGetModes(xf86OutputPtr output) {
