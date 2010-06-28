@@ -84,12 +84,12 @@ fi
 
 # Check if KMS is to be included
 AC_MSG_CHECKING([whether to use KMS])
-AC_DEFINE(ENABLE_KMS, 1, [Define to 1 if KMS is to be supported])
 AC_ARG_ENABLE(kms,
 [  --enable-kms    Include support for kernel modesetting (KMS)],
 [case "${enableval}" in
   yes) kms=true
-       AC_MSG_RESULT([yes]) ;;
+       AC_MSG_RESULT([yes])
+       AC_DEFINE(HAVE_KMS, 1, [Define to 1 if KMS is to be supported]);;
   no)  kms=false
        AC_MSG_RESULT([no]) ;;
   *) AC_MSG_ERROR(bad value ${enableval} for --enable-kms) ;;

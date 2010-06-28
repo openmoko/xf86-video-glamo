@@ -325,7 +325,7 @@ GlamoFbdevProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
 	return foundScreen;
 }
 
-#ifdef ENABLE_KMS
+#ifdef HAVE_KMS
 
 static Bool
 GlamoKMSProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
@@ -369,7 +369,7 @@ GlamoKMSProbe(DriverPtr drv, GDevPtr *devSections, int numDevSections)
 	return foundScreen;
 }
 
-#endif  /* ENABLE_KMS */
+#endif  /* HAVE_KMS */
 
 static Bool
 GlamoProbe(DriverPtr drv, int flags)
@@ -388,15 +388,15 @@ GlamoProbe(DriverPtr drv, int flags)
 	if (numDevSections <= 0) return FALSE;
 
 	/* Is today a good day to use KMS? */
-#ifdef ENABLE_KMS
+#ifdef HAVE_KMS
 	if ( GlamoKernelModesettingAvailable() ) {
 		foundScreen = GlamoKMSProbe(drv, devSections, numDevSections);
 	} else {
 		foundScreen = GlamoFbdevProbe(drv, devSections, numDevSections);
 	}
-#else  /* ENABLE_KMS */
+#else  /* HAVE_KMS */
 	foundScreen = GlamoFbdevProbe(drv, devSections, numDevSections);
-#endif  /* ENABLE_KMS */
+#endif  /* HAVE_KMS */
 
 	free(devSections);
 	TRACE("probe done");
