@@ -165,7 +165,7 @@ GlamoOutputInit(ScrnInfoPtr pScrn) {
     output->driver_private = pGlamoOutput;
     pGlamoOutput->modes = NULL;
 
-    mode = xnfalloc(sizeof(DisplayModeRec));
+    mode = xnfcalloc(1, sizeof(DisplayModeRec));
     if (!mode)
         return;
 
