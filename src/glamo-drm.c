@@ -32,6 +32,8 @@
 
 #include "glamo.h"
 
+/* How many commands can be stored before forced dispatch */
+#define GLAMO_CMDQ_MAX_COUNT 1024
 
 /* Submit the prepared command sequence to the kernel */
 void GlamoDRMDispatch(GlamoPtr pGlamo)
@@ -60,7 +62,7 @@ void GlamoDRMDispatch(GlamoPtr pGlamo)
 
 void GlamoDRMAddCommand(GlamoPtr pGlamo, uint16_t reg, uint16_t val)
 {
-	if ( pGlamo->cmdq_drm_used == pGlamo->cmdq_drm_size ) {
+	if ( pGlamo->cmdq_drm_used >= GLAMO_CMDQ_MAX_COUNT - 2 ) {
 		xf86DrvMsg(pGlamo->pScreen->myNum, X_INFO,
 		           "Forced command cache flush.\n");
 		GlamoDRMDispatch(pGlamo);
@@ -74,7 +76,8 @@ void GlamoDRMAddCommand(GlamoPtr pGlamo, uint16_t reg, uint16_t val)
 
 void GlamoDRMAddCommandBO(GlamoPtr pGlamo, uint16_t reg, struct glamo_bo *bo)
 {
-	if ( pGlamo->cmdq_drm_used == pGlamo->cmdq_drm_size ) {
+	if ( pGlamo->cmdq_drm_used >= GLAMO_CMDQ_MAX_COUNT - 4 ||
+	       pGlamo->cmdq_obj_used >= GLAMO_CMDQ_MAX_COUNT) {
 		xf86DrvMsg(pGlamo->pScreen->myNum, X_INFO,
 		           "Forced command cache flush.\n");
 		GlamoDRMDispatch(pGlamo);
@@ -98,10 +101,13 @@ void GlamoDRMAddCommandBO(GlamoPtr pGlamo, uint16_t reg, struct glamo_bo *bo)
 
 void GlamoDRMInit(GlamoPtr pGlamo)
 {
-	pGlamo->cmdq_objs = malloc(1024);
-	pGlamo->cmdq_obj_pos = malloc(1024);
+	pGlamo->cmdq_objs = malloc(GLAMO_CMDQ_MAX_COUNT);
+	pGlamo->cmdq_obj_pos = malloc(GLAMO_CMDQ_MAX_COUNT);
 	pGlamo->cmdq_obj_used = 0;
 	pGlamo->cmdq_drm_used = 0;
-	pGlamo->cmdq_drm_size = 4 * 1024;
+	/* we're using 2bytes per entry (uint16_t) that's why we need to allocate
+	 * GLAMO_CMDQ_MAX_COUNT * 2 bytes
+	 */
+	pGlamo->cmdq_drm_size = 2 * GLAMO_CMDQ_MAX_COUNT;
 	pGlamo->cmdq_drm = malloc(pGlamo->cmdq_drm_size);
 }
