@@ -101,8 +101,8 @@ void GlamoDRMAddCommandBO(GlamoPtr pGlamo, uint16_t reg, struct glamo_bo *bo)
 
 void GlamoDRMInit(GlamoPtr pGlamo)
 {
-	pGlamo->cmdq_objs = malloc(GLAMO_CMDQ_MAX_COUNT);
-	pGlamo->cmdq_obj_pos = malloc(GLAMO_CMDQ_MAX_COUNT);
+	pGlamo->cmdq_objs = malloc(GLAMO_CMDQ_MAX_COUNT*sizeof(uint32_t));
+	pGlamo->cmdq_obj_pos = malloc(GLAMO_CMDQ_MAX_COUNT*sizeof(unsigned int));
 	pGlamo->cmdq_obj_used = 0;
 	pGlamo->cmdq_drm_used = 0;
 	/* we're using 2bytes per entry (uint16_t) that's why we need to allocate
